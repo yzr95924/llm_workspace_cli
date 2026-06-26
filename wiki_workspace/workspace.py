@@ -10,6 +10,8 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - py<3.11 路径
     import tomli as tomllib  # type: ignore
 
+from wiki_workspace import errors
+
 
 def atomic_write(path, content):
     """tmp + fsync + 原子 rename（spec §4.3）。失败绝不写半截。"""
@@ -111,3 +113,26 @@ def find_root(cli_workspace=None, env=None, cwd=None, home=None):
             return candidate
     # 4. 默认 ~/llm_workspace
     return (Path(home) / DEFAULT_HOME_WORKSPACE).resolve()
+
+
+def manifest_path(root):
+    return Path(root) / manifest_filename()
+
+
+def save_manifest(workspace_root, manifest_obj):
+    """原子写 + 重解析自检（spec §4.3）。若刚写完的文件重解析失败，
+    抛 CommandError(EXIT_INTERNAL, 'internal-state-corruption')。"""
+    from wiki_workspace import manifest as manifest_mod
+
+    text = manifest_mod.serialize(manifest_obj)
+    target = manifest_path(workspace_root)
+    atomic_write(target, text)
+    try:
+        manifest_mod.parse(text)
+    except Exception as exc:  # 重解析失败 -> 损坏
+        raise errors.CommandError(
+            errors.EXIT_INTERNAL,
+            "internal-state-corruption",
+            "写盘后重解析失败：{}".format(exc),
+            hint="检查磁盘空间 / 权限；可从 .workspace.toml.bak 恢复",
+        )

@@ -1,6 +1,8 @@
 import os
 
-from wiki_workspace import workspace
+import pytest
+
+from wiki_workspace import errors, manifest, workspace
 
 
 def test_atomic_write_creates_file(tmp_path):
@@ -130,3 +132,21 @@ def test_workspace_helpers(tmp_path):
     assert workspace.is_initialized(tmp_path) is False
     (tmp_path / ".workspace.toml").write_text('schema_version = "1"\n', encoding="utf-8")
     assert workspace.is_initialized(tmp_path) is True
+
+
+def test_save_manifest_writes_and_reparses(tmp_path):
+    m = manifest.empty_manifest("2026-06-26")
+    workspace.save_manifest(tmp_path, m)
+    written = (tmp_path / ".workspace.toml").read_text(encoding="utf-8")
+    assert "schema_version" in written
+    manifest.parse(written)  # 重解析成功（无异常）
+
+
+def test_save_manifest_raises_internal_on_reparse_failure(tmp_path, monkeypatch):
+    m = manifest.empty_manifest("2026-06-26")
+    # 让 serialize 写出不可解析的 TOML
+    monkeypatch.setattr(manifest, "serialize", lambda _m: "this is = = not toml =")
+    with pytest.raises(errors.CommandError) as ei:
+        workspace.save_manifest(tmp_path, m)
+    assert ei.value.exit_code == errors.EXIT_INTERNAL
+    assert ei.value.category == "internal-state-corruption"
