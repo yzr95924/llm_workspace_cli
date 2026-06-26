@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from datetime import date
 from pathlib import Path
 
 try:
@@ -70,3 +71,43 @@ def dump_toml(data):
         lines.append("tags = [" + ", ".join('"{}"'.format(_toml_escape(t)) for t in tags) + "]")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+DEFAULT_HOME_WORKSPACE = "llm_workspace"
+
+
+def today_iso():
+    return date.today().isoformat()
+
+
+def manifest_filename():
+    return ".workspace.toml"
+
+
+def is_initialized(root):
+    return (Path(root) / manifest_filename()).is_file()
+
+
+def find_root(cli_workspace=None, env=None, cwd=None, home=None):
+    """4 级优先级（spec §3.0.1）。永不抛错；兜底到 ~/llm_workspace。"""
+    if env is None:
+        env = os.environ
+    if cwd is None:
+        cwd = os.getcwd()
+    if home is None:
+        home = str(Path.home())
+
+    # 1. 显式 --workspace
+    if cli_workspace:
+        return Path(cli_workspace).expanduser().resolve()
+    # 2. $LLMW_WORKSPACE
+    env_val = env.get("LLMW_WORKSPACE")
+    if env_val:
+        return Path(env_val).expanduser().resolve()
+    # 3. 从 cwd 向上找第一个含 .workspace.toml 的目录
+    cur = Path(cwd).resolve()
+    for candidate in [cur, *cur.parents]:
+        if (candidate / manifest_filename()).is_file():
+            return candidate
+    # 4. 默认 ~/llm_workspace
+    return (Path(home) / DEFAULT_HOME_WORKSPACE).resolve()

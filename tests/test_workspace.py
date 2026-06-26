@@ -89,3 +89,44 @@ def test_dump_toml_escapes_quotes():
     assert '\\"' in text  # 引号被转义
     reparsed = workspace.load_toml_str(text)
     assert reparsed["wikis"]["w"]["display_name"] == 'he said "hi"'
+
+
+def test_find_root_cli_flag_wins(tmp_path, monkeypatch):
+    explicit = tmp_path / "explicit"
+    explicit.mkdir()
+    (explicit / ".workspace.toml").write_text('schema_version = "1"\n', encoding="utf-8")
+    env_root = tmp_path / "env"
+    env_root.mkdir()
+    monkeypatch.setenv("LLMW_WORKSPACE", str(env_root))
+    assert workspace.find_root(cli_workspace=str(explicit)) == explicit.resolve()
+
+
+def test_find_root_env_when_no_flag(tmp_path, monkeypatch):
+    env_root = tmp_path / "env"
+    env_root.mkdir()
+    (env_root / ".workspace.toml").write_text('schema_version = "1"\n', encoding="utf-8")
+    monkeypatch.setenv("LLMW_WORKSPACE", str(env_root))
+    assert workspace.find_root(cli_workspace=None, cwd=tmp_path / "elsewhere") == env_root.resolve()
+
+
+def test_find_root_walks_up_to_workspace_toml(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    (ws / "deep" / "dir").mkdir(parents=True)
+    (ws / ".workspace.toml").write_text('schema_version = "1"\n', encoding="utf-8")
+    monkeypatch.delenv("LLMW_WORKSPACE", raising=False)
+    found = workspace.find_root(cli_workspace=None, cwd=ws / "deep" / "dir", home=tmp_path / "home")
+    assert found == ws.resolve()
+
+
+def test_find_root_falls_back_to_home_default(tmp_path, monkeypatch):
+    monkeypatch.delenv("LLMW_WORKSPACE", raising=False)
+    home = tmp_path / "home"
+    found = workspace.find_root(cli_workspace=None, cwd=tmp_path, home=home)
+    assert found == (home / "llm_workspace").resolve()
+
+
+def test_workspace_helpers(tmp_path):
+    assert workspace.manifest_filename() == ".workspace.toml"
+    assert workspace.is_initialized(tmp_path) is False
+    (tmp_path / ".workspace.toml").write_text('schema_version = "1"\n', encoding="utf-8")
+    assert workspace.is_initialized(tmp_path) is True
