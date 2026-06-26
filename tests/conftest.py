@@ -25,3 +25,13 @@ def fake_skill(tmp_path):
         "# {{TOPIC_NAME}}\nsetup {{SETUP_DATE}}\n", encoding="utf-8"
     )
     return root
+
+
+@pytest.fixture(autouse=True)
+def reset_errors_globals():
+    """errors.py 用模块级 QUIET/DEBUG 全局量；每个测试前后复位。"""
+    from wiki_workspace import errors
+
+    errors.configure(quiet=False, debug=False)
+    yield
+    errors.configure(quiet=False, debug=False)
