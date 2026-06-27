@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# bin/llmw — 仓库根目录下的可执行入口
+# 通过 python -m llmw 调用；包安装到 site-packages 后此文件也被复制到 ~/.local/bin/
+set -e
+exec python3 -m llmw "$@"
