@@ -1,0 +1,9 @@
+schema_version = 1
+name = "__NAME__"
+topic = "__TOPIC__"
+display_name = ""
+description = ""
+tags = []
+model = ""
+created_at = "__NOW_ISO8601__"
+updated_at = "__NOW_ISO8601__"
