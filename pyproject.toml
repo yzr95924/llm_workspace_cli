@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llmw"
+version = "0.1.0"
+description = "Wiki workspace CLI for managing LLM wikis under a single git repo"
+requires-python = ">=3.7"
+dependencies = [
+    "tomli>=1.1; python_version < '3.11'",
+]
+
+[project.scripts]
+llmw = "llmw.cli:main"
+
+[tool.setuptools]
+packages = ["llmw", "llmw.workspace", "llmw.wiki"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+llmw = ["../templates/*.template"]
