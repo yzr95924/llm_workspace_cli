@@ -1,0 +1,34 @@
+name: test
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff format --check .
+      - run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.6 已 EOL（2021-12）且不在现代 runner 镜像里、setup-python@v5 装不上；
+        # 代码按 py37 语法安全写成，3.7 即可证明向后兼容，3.11 覆盖现代。
+        # 详见 doc/plans/2026-06-26-llmw-v1.md「验证日志」。
+        python-version: ["3.7", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # 不装 [dev]（含 ruff）：ruff 在 3.7 上无法干净安装；lint 已由 lint job 覆盖。
+      # 钉 pytest<8：pytest 8 要求 py>=3.8，3.7 job 需回落到 7.x 且避免慢回溯。
+      - run: pip install -e . "pytest>=7,<8" "pytest-cov>=4"
+      - run: pytest -q
