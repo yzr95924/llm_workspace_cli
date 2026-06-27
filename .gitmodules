@@ -1,0 +1,3 @@
+[submodule "my_SKILL"]
+	path = my_SKILL
+	url = git@github.com:yzr95924/my_SKILL.git
