@@ -1,0 +1,13 @@
+schema_version = "1"
+created = "2026-06-26"
+
+[workspace]
+default_model = "claude-sonnet-4-6"
+
+[wikis.llm-systems]
+path = "llm-systems"
+display_name = "LLM Systems"
+description = "research"
+model = "claude-opus-4-8"
+created = "2026-06-26"
+tags = ["research", "papers"]

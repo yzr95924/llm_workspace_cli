@@ -31,3 +31,4 @@ ignore = ["E501"]  # 行宽交给 formatter 管，不靠 lint
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=wiki_workspace --cov-fail-under=85"

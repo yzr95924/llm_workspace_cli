@@ -50,3 +50,30 @@ def test_parse_frontmatter_real_when_present(fake_skill):
     result = _compat.parse_frontmatter_simple(text)
     assert result["title"] == "X"
     assert result["tags"] == ["a", "b"]
+
+
+def test_configure_loads_real_scripts(tmp_path):
+    """configure() 真正经 importlib 加载 skill 的 scripts/setup_wiki.py 与
+    ingest_diff.py，取出真 slugify / parse_frontmatter_simple（覆盖
+    _load_module 成功返回路径 + 真 func 提取）。"""
+    skill = tmp_path / "llm-wiki-management"
+    (skill / "scripts").mkdir(parents=True)
+    (skill / "SKILL.md").write_text("# x\n", encoding="utf-8")
+    (skill / "scripts" / "setup_wiki.py").write_text(
+        "def slugify(name):\n    return 'REAL-' + name\n", encoding="utf-8"
+    )
+    (skill / "scripts" / "ingest_diff.py").write_text(
+        "def parse_frontmatter_simple(text):\n    return {'real': True}\n", encoding="utf-8"
+    )
+    _compat.configure(skill)
+    assert _compat.slugify("foo") == "REAL-foo"  # 真 slugify，非 stub
+    assert _compat.parse_frontmatter_simple("anything") == {"real": True}
+
+
+def test_parse_frontmatter_stub_multiline_and_empty_list(tmp_path):
+    """stub 的缩进多行列表、空列表、循环结束时的 flush 分支。"""
+    _compat.configure(None)
+    text = "---\naliases: []\nrelated:\n  - a\n  - b\n---\nbody"
+    r = _compat.parse_frontmatter_simple(text)
+    assert r["aliases"] == []
+    assert r["related"] == ["a", "b"]

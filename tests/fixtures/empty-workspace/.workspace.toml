@@ -1,0 +1,5 @@
+schema_version = "1"
+created = "2026-06-26"
+
+[workspace]
+default_model = "claude-sonnet-4-6"
