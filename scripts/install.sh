@@ -48,7 +48,8 @@ esac
 rc_file="$(select_rc)"
 if [ "$already" = 0 ]; then
   mkdir -p "$(dirname "$rc_file")"
-  cat >> "$rc_file" <<'BLOCK'
+  if ! grep -qx '# >>> llmw (managed by install.sh) >>>' "$rc_file" 2>/dev/null; then
+    cat >> "$rc_file" <<'BLOCK'
 # >>> llmw (managed by install.sh) >>>
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;
@@ -56,7 +57,8 @@ case ":$PATH:" in
 esac
 # <<< llmw <<<
 BLOCK
-  wrote_rc=1
+    wrote_rc=1
+  fi
 fi
 
 echo "已安装 llmw -> $bin_dir/llmw"

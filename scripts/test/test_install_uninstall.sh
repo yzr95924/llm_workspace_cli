@@ -77,6 +77,18 @@ test_no_marker_when_bin_in_path() {
     assert_not_contains "$TMPHOME/.zshrc" "# >>> llmw (managed by install.sh) >>>"
   fi
 }
+test_install_idempotent_no_dup_marker() {
+  run_install /bin/zsh "$PYDIR:/usr/bin:/bin"
+  run_install /bin/zsh "$PYDIR:/usr/bin:/bin"
+  assert_count "$TMPHOME/.zshrc" "# >>> llmw (managed by install.sh) >>>" 1
+}
+test_reinstall_overwrites_wrapper() {
+  run_install /bin/zsh "$PYDIR:/usr/bin:/bin"
+  echo "SENTINEL_BEFORE" >> "$TMPHOME/.local/bin/llmw"
+  run_install /bin/zsh "$PYDIR:/usr/bin:/bin"
+  assert_not_contains "$TMPHOME/.local/bin/llmw" "SENTINEL_BEFORE"
+  assert_contains "$TMPHOME/.local/bin/llmw" "python3 -m llmw"
+}
 
 # ---- runner ----
 TESTS=(
@@ -85,6 +97,8 @@ TESTS=(
   test_wrapper_embeds_repo
   test_marker_written_when_bin_not_in_path
   test_no_marker_when_bin_in_path
+  test_install_idempotent_no_dup_marker
+  test_reinstall_overwrites_wrapper
 )
 
 run_test() {
