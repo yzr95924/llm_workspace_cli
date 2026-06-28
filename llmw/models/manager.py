@@ -244,7 +244,7 @@ def model_show(workspace_root: Path, model_id: str, as_json: bool = False) -> No
 
 
 def model_set_default(workspace_root: Path, model_id: str) -> None:
-    reg = load(workspace_root)
+    reg = _load_lenient(workspace_root)  # 容忍 ModelDefaultNotSet（unset-default 后再 set-default）
     set_default(reg, model_id)
     save(workspace_root, reg)
     print(f"✓ '{model_id}' 设为默认（旧的自动取消）", file=sys.stdout)
