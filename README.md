@@ -14,21 +14,31 @@ git submodule update --init --recursive
 
 > ⚠ `git submodule update` 必须跑，否则 `wiki add` 报 `SkillMissing`。
 
-### 2. 安装 Python 包（开发模式）
+### 2. 安装命令（推荐）
+
+```bash
+./scripts/install.sh
+```
+
+生成 `~/.local/bin/llmw`（wrapper 内嵌本仓库路径，用 `PYTHONPATH` 解析 `llmw` 包，**无需 pip/venv**），并在 `~/.local/bin` 不在 `PATH` 时自动往 shell rc 注册一个 marker 块。装完按提示 `source ~/.zshrc`（或重开终端）即可。
+
+> 全程不动 `llmw/` 包本身、不碰 pip。Python 3.11+ 零第三方依赖；<3.11 运行时需 `pip install 'tomli>=1.1'`。
+
+卸载（只删 wrapper + PATH marker，**不删仓库、不删 workspace 数据**）：
+
+```bash
+./scripts/uninstall.sh
+```
+
+### 3. 备选：pip 安装
+
+入口是仓库根的 `bin/llmw`（thin shell，`exec python3 -m llmw`）。若更喜欢走 pip：
 
 ```bash
 pip install -e .
 ```
 
-需要 Python 3.7+。3.10 及以下需 `pip install tomli`。
-
-### 3. 加 `bin/llmw` 到 PATH
-
-```bash
-export PATH="$(pwd)/bin:$PATH"
-```
-
-> Phase 2 会做正式 install/uninstall 脚本（自动加 `~/.local/bin/llmw` + PATH 注册）。
+> 系统 Python（Homebrew 等 PEP 668 externally-managed）会拒绝全局 install，改用 `pip install -e . --user`、`pipx install -e .` 或先建 venv。
 
 ## 快速上手
 
@@ -151,7 +161,7 @@ rm -rf "$TMPWS"
 | Claude Code session 启动 | ✅（不传 model） | |
 | model registry | ❌ | ✅（`workspace_models.toml` + `llmw model` 命令） |
 | ingest / lint / query 包装 | ❌（留给 SKILL session 内） | |
-| install / uninstall 脚本 | ❌（手动加 PATH） | ✅ |
+| install / uninstall 脚本 | ✅（`./scripts/install.sh` / `./scripts/uninstall.sh`） | |
 
 详见 `doc/design/` 各章节。
 
