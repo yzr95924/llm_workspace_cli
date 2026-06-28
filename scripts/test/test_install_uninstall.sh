@@ -106,6 +106,16 @@ test_install_fails_without_python3() {
   [ "$code" != 0 ] || { echo "      期望非零退出，实际 0"; cat "$TMPHOME/inst.out"; exit 1; }
   assert_contains "$TMPHOME/inst.out" "python3"
 }
+test_wrapper_reports_when_repo_missing() {
+  run_install /bin/zsh "$PYDIR:/usr/bin:/bin"
+  awk -v new='REPO="/nonexistent/llmw-repo"' '/^REPO=/{print new; next} 1' \
+    "$TMPHOME/.local/bin/llmw" > "$TMPHOME/badllmw"
+  chmod +x "$TMPHOME/badllmw"
+  HOME="$TMPHOME" PATH="$PYDIR:/usr/bin:/bin" "$TMPHOME/badllmw" --help >"$TMPHOME/bad.out" 2>&1
+  local code=$?
+  [ "$code" != 0 ] || { echo "      期望非零退出"; cat "$TMPHOME/bad.out"; exit 1; }
+  assert_contains "$TMPHOME/bad.out" "仓库目录不存在"
+}
 
 # ---- runner ----
 TESTS=(
@@ -117,6 +127,7 @@ TESTS=(
   test_install_idempotent_no_dup_marker
   test_reinstall_overwrites_wrapper
   test_install_fails_without_python3
+  test_wrapper_reports_when_repo_missing
 )
 
 run_test() {
