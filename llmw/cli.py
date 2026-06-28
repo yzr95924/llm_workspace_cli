@@ -67,7 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
     pw_cfg.add_argument("cfg_key", nargs="?", default=None)
     pw_cfg.add_argument("cfg_value", nargs="?", default=None)
 
-    # enter (Task 16)
+    # enter
+    pw_enter = wiki_sub.add_parser("enter", help="启动 Claude Code session")
+    pw_enter.add_argument("--dry-run", action="store_true", dest="dry_run")
 
     return parser
 
@@ -134,6 +136,9 @@ def main(argv=None) -> int:
                     wiki_config_set(ws_root, args.name, args.cfg_key, args.cfg_value)
                 elif args.cfg_action == "unset":
                     wiki_config_unset(ws_root, args.name, args.cfg_key)
+            elif wa == "enter":
+                from llmw.wiki.enter import enter as wiki_enter
+                return wiki_enter(ws_root, args.name, dry_run=args.dry_run)
             else:
                 print("[llmw] wiki 子命令需要 ACTION (add/remove/show/config/enter)",
                       file=sys.stderr)
