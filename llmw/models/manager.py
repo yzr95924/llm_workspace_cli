@@ -12,7 +12,6 @@ from llmw.errors import (
     ModelNotInRegistry,
     PurgeRequiresConfirmation,
 )
-from llmw._compat import toml_loads
 from llmw.models.redact import redact_api_key
 from llmw.models.store import (
     ModelEntry,
@@ -42,45 +41,6 @@ def set_default(reg: Registry, model_id: str) -> None:
         m.is_default = False
     reg.models[model_id].is_default = True
     reg.bump()
-
-
-# ===== _load_lenient =====
-
-
-def _load_lenient(workspace_root: Path) -> Registry:
-    """manager 层用：容忍 load() 的 ModelDefaultNotSet（"有 models 但无 default"）。
-
-    当 registry 因 is_default 计数不合规被 load 拒绝时，手动从 TOML 读出
-    models（视为全部 is_default=False），构造等价的 Registry 对象返回。
-
-    其他错误（RegistryMissing / SchemaVersionUnsupported / InvalidModelField /
-    ModelIdConflict / ModelDefaultAmbiguous）仍由 load() 直接抛——这些是结构性
-    问题，不应被 lenient 吞掉。
-    """
-    from llmw.errors import ModelDefaultNotSet
-
-    try:
-        return load(workspace_root)
-    except ModelDefaultNotSet:
-        # 重新读 TOML，构造等价的 Registry（is_default 全 False）
-        toml_path = workspace_root / "workspace_models.toml"
-        with open(toml_path, "rb") as f:
-            raw = toml_loads(f.read().decode("utf-8"))
-        models = {}
-        for entry in raw.get("models", []):
-            models[entry["model_id"]] = ModelEntry(
-                model_id=entry["model_id"],
-                name=entry["name"],
-                base_url=entry["base_url"],
-                api_key=entry["api_key"],
-                is_default=False,
-            )
-        return Registry(
-            schema_version=raw["schema_version"],
-            created_at=raw["created_at"],
-            updated_at=raw["updated_at"],
-            models=models,
-        )
 
 
 # ===== model_add =====
@@ -152,6 +112,7 @@ def model_add(
             )
 
     # 加载现有 registry；不存在 → 初始化
+    # 加载现有 registry；不存在 → 初始化
     try:
         reg = load(workspace_root)
     except RegistryMissing:
@@ -183,10 +144,12 @@ def model_add(
 
 
 def model_list(workspace_root: Path, as_json: bool = False) -> int:
-    reg = _load_lenient(workspace_root)
+    reg = load(workspace_root)
     if reg.models and not any(m.is_default for m in reg.models.values()):
-        print("[llmw] (registry has no default — use `llmw model set-default --model-id <ID>` to enable enter)",
-              file=sys.stderr)
+        print(
+            "[llmw] (registry has no default — use `llmw model set-default --model-id <ID>` to enable enter)",
+            file=sys.stderr,
+        )
     if as_json:
         out = [
             {
@@ -216,7 +179,7 @@ def model_list(workspace_root: Path, as_json: bool = False) -> int:
 
 
 def model_show(workspace_root: Path, model_id: str, as_json: bool = False) -> None:
-    reg = _load_lenient(workspace_root)
+    reg = load(workspace_root)
     if model_id not in reg.models:
         raise ModelNotInRegistry(
             f"model_id '{model_id}' 不在 registry 中",
@@ -247,7 +210,7 @@ def model_show(workspace_root: Path, model_id: str, as_json: bool = False) -> No
 
 
 def model_set_default(workspace_root: Path, model_id: str) -> None:
-    reg = _load_lenient(workspace_root)  # 容忍 ModelDefaultNotSet（unset-default 后再 set-default）
+    reg = load(workspace_root)
     set_default(reg, model_id)
     save(workspace_root, reg)
     print(f"✓ '{model_id}' 设为默认（旧的自动取消）", file=sys.stdout)
@@ -257,7 +220,7 @@ def model_set_default(workspace_root: Path, model_id: str) -> None:
 
 
 def model_unset_default(workspace_root: Path) -> None:
-    reg = _load_lenient(workspace_root)  # 容忍 ModelDefaultNotSet
+    reg = load(workspace_root)
     any_unset = False
     for m in reg.models.values():
         if m.is_default:
@@ -275,7 +238,7 @@ def model_unset_default(workspace_root: Path) -> None:
 
 
 def model_remove(workspace_root: Path, model_id: str, yes: bool = False) -> None:
-    reg = _load_lenient(workspace_root)  # 容忍 ModelDefaultNotSet
+    reg = load(workspace_root)
     if model_id not in reg.models:
         raise ModelNotInRegistry(
             f"model_id '{model_id}' 不在 registry 中",

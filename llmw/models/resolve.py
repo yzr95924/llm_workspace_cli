@@ -2,16 +2,19 @@
 
 设计 §9.4。被 enter / show / list / wiki config 校验共同消费。
 """
+
 import sys
 from pathlib import Path
 
 from llmw._compat import TOMLDecodeError
 from llmw.errors import (
-    ModelDefaultNotSet, ModelNotInRegistry, SchemaVersionUnsupported,
-    WikiDirMissing, WikiNotFound,
+    ModelDefaultNotSet,
+    ModelNotInRegistry,
+    SchemaVersionUnsupported,
+    WikiDirMissing,
+    WikiNotFound,
 )
-from llmw.models import store as models_store
-from llmw.models.store import ModelEntry, RegistryMissing
+from llmw.models.store import ModelEntry, RegistryMissing, load
 from llmw.wiki import store as wiki_store
 from llmw.workspace import store as ws_store
 
@@ -51,11 +54,17 @@ def resolve_for_wiki(workspace_root: Path, wiki_name: str) -> ModelEntry:
         try:
             meta = wiki_store.load(wiki_dir)
         except (SchemaVersionUnsupported, OSError, TOMLDecodeError) as e:
-            print(f"[llmw] warning: 无法读取 wiki_metadata.toml: {type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"[llmw] warning: 无法读取 wiki_metadata.toml: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             meta = None
 
     try:
-        reg = models_store.load(workspace_root)
+        # load 对 "有 models 但无 default" 不抛错 (default 可后置); wiki 若指定了 model,
+        # 即使 registry 无 default 也能用 (走下面的 wiki.model 分支)。
+        # 多条 default 仍抛 ModelDefaultAmbiguous, 无 registry 抛 RegistryMissing。
+        reg = load(workspace_root)
     except RegistryMissing as e:
         # 用户体验：直接说 ModelDefaultNotSet，不要暴露 RegistryMissing
         raise ModelDefaultNotSet(
@@ -72,7 +81,8 @@ def resolve_for_wiki(workspace_root: Path, wiki_name: str) -> ModelEntry:
             )
         return reg.models[meta.model]
 
-    # fallback 到默认（load 时已保证 0/1 条）
+    # fallback 到默认（lenient load: 多条 default 已抛 ModelDefaultAmbiguous; 无 default
+    # 时 reg 内 is_default 全 False, 走到这里 defaults 为空 → 报 ModelDefaultNotSet）
     defaults = [m for m in reg.models.values() if m.is_default]
     if not defaults:
         raise ModelDefaultNotSet(

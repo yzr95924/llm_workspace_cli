@@ -43,9 +43,9 @@ pip install -e .
 ## 快速上手
 
 ```bash
-# 初始化 workspace（默认 ~/yzr_llm_workspace）
+# 初始化 workspace（默认 ~/yzr_llm_wiki_workspace）
 llmw init
-cd ~/yzr_llm_workspace
+cd ~/yzr_llm_wiki_workspace
 
 # 新建一个 wiki（非 TTY 需全 flag）
 llmw wiki --name=llm-systems add \
@@ -98,6 +98,26 @@ llmw wiki --name=llm-systems remove --purge --yes   # 同时删子目录
 | 1 | 用户错误（参数非法、wiki 不存在等） |
 | 2 | 环境错误（SKILL submodule 缺失、claude 不在 PATH 等） |
 | 3 | 内部错误（未捕获异常） |
+
+## 目录结构
+
+```
+llm_workspace_cli/                # 仓库根
+├── bin/                          # 唯一可执行入口：thin shell → python -m llmw
+├── llmw/                         # Python 包
+│   ├── workspace/                # workspace 级：init / config / list + workspace.toml 读写
+│   └── wiki/                     # wiki 级：add / remove / show / config / enter + wiki_metadata.toml 读写
+├── scripts/                      # install / uninstall shell 脚本及其集成测试
+├── templates/                    # wiki add 时使用的元数据模板
+├── doc/                          # 设计文档（按子功能拆分）+ 实施计划
+├── MEMORY/                       # 项目级"为什么 + 边界"记忆（提交进仓库）
+├── my_SKILL/                     # git submodule，外部 SKILL 提供 setup_wiki.py
+├── tests/                        # 当前阶段测试优先级低，先做手动 smoke（见下方）
+├── .github/workflows/test.yml    # CI: ruff lint + pytest（py3.7 / py3.11）
+└── pyproject.toml                # setuptools 配置
+```
+
+模块职责边界与关键不变量（CLI 不写 wiki 内容、不重写 setup_wiki 逻辑、SKILL 路径固定）见 [`doc/design/00-overview.md`](doc/design/00-overview.md)。
 
 ## Manual Smoke Test（prototype 阶段验收清单）
 

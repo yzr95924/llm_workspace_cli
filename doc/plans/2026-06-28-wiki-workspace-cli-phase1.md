@@ -183,7 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"llmw {__version__}")
     parser.add_argument(
         "--workspace", metavar="PATH", default=None,
-        help="workspace 根路径 (默认: $LLMW_WORKSPACE 或 ~/yzr_llm_workspace)",
+        help="workspace 根路径 (默认: $LLMW_WORKSPACE 或 ~/yzr_llm_wiki_workspace)",
     )
     parser.add_argument("--json", action="store_true", help="全局: 输出 JSON 格式")
     parser.add_argument("--debug", action="store_true", help="全局: 打印 traceback")
@@ -529,7 +529,7 @@ from pathlib import Path
 from llmw import __version__
 from llmw.errors import WorkspaceNotFound
 
-DEFAULT_WORKSPACE = Path.home() / "yzr_llm_workspace"
+DEFAULT_WORKSPACE = Path.home() / "yzr_llm_wiki_workspace"
 
 
 def resolve_workspace_root(
@@ -541,7 +541,7 @@ def resolve_workspace_root(
     优先级:
       1. explicit (--workspace flag)
       2. $LLMW_WORKSPACE env var
-      3. ~/yzr_llm_workspace (默认)
+      3. ~/yzr_llm_wiki_workspace (默认)
 
     解析后校验: 必须存在、是目录、含 workspace.toml。
     不存在 → WorkspaceNotFound
@@ -1467,7 +1467,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"llmw {__version__}")
     parser.add_argument(
         "--workspace", metavar="PATH", default=None,
-        help="workspace 根路径 (默认: $LLMW_WORKSPACE 或 ~/yzr_llm_workspace)",
+        help="workspace 根路径 (默认: $LLMW_WORKSPACE 或 ~/yzr_llm_wiki_workspace)",
     )
     parser.add_argument("--json", action="store_true", help="全局: 输出 JSON 格式")
     parser.add_argument("--debug", action="store_true", help="全局: 打印 traceback")
@@ -2504,9 +2504,9 @@ export PATH="$(pwd)/bin:$PATH"
 ## 快速上手
 
 ```bash
-# 初始化 workspace（默认 ~/yzr_llm_workspace）
+# 初始化 workspace（默认 ~/yzr_llm_wiki_workspace）
 llmw init
-cd ~/yzr_llm_workspace
+cd ~/yzr_llm_wiki_workspace
 
 # 新建一个 wiki（非 TTY 需全 flag）
 llmw wiki --name=llm-systems add \

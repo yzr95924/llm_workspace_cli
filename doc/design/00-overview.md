@@ -112,4 +112,4 @@ llmw.cli (argparse + 分派)
   - `bin/llmw` 复制到用户环境（典型位置：`~/.local/bin/llmw`）
   - `PATH` 注册（追加到 shell rc：`.bashrc` / `.zshrc` 等）
   - 卸载时反向操作（删副本、清理 `PATH` 条目）
-- 详细设计另起文档（暂未创建）
+- 详细设计见 [`08-install-uninstall.md`](08-install-uninstall.md)

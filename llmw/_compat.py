@@ -34,15 +34,44 @@ def _dump_section(buf, data, prefix):
         _dump_section(buf, v, prefix=f"{prefix}{k}.")
 
 
+# TOML basic string 必要转义: 反斜杠 / 双引号 / 控制字符。
+# 手写 dump 必须转义, 否则含 \ 或 " 的值会产出非法 TOML, 紧接着的 load 即炸
+# (TOMLDecodeError: Unescaped '\' in a string)。
+_BASIC_ESCAPES = {
+    "\\": "\\\\",
+    '"': '\\"',
+    "\b": "\\b",  # U+0008
+    "\t": "\\t",  # U+0009
+    "\n": "\\n",  # U+000A
+    "\f": "\\f",  # U+000C
+    "\r": "\\r",  # U+000D
+}
+
+
+def _toml_escape_str(s: str) -> str:
+    """转义为合法 TOML basic string 内容（不含两侧双引号）。
+    逐字符处理, 天然避免二次转义; 其余控制字符 (U+0000..U+001F 除已列举) 用 \\uXXXX。
+    """
+    out = []
+    for ch in s:
+        if ch in _BASIC_ESCAPES:
+            out.append(_BASIC_ESCAPES[ch])
+        elif ord(ch) < 0x20:
+            out.append(f"\\u{ord(ch):04x}")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def _dump_kv(buf, items):
     for k, v in items:
         if isinstance(v, str):
-            buf.write(f'{k} = "{v}"\n')
+            buf.write(f'{k} = "{_toml_escape_str(v)}"\n')
         elif isinstance(v, bool):
             buf.write(f"{k} = {str(v).lower()}\n")
         elif isinstance(v, list):
             inner = ", ".join(
-                f'"{x}"'
+                f'"{_toml_escape_str(x)}"'
                 if isinstance(x, str)
                 else (str(x).lower() if isinstance(x, bool) else str(x))
                 for x in v

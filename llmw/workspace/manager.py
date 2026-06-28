@@ -64,14 +64,22 @@ def _ensure_workspace_gitignore(workspace_root: Path) -> None:
 # ===== init =====
 
 
+def _is_effectively_empty(path: Path) -> bool:
+    """目录是否为空（忽略 git 元数据 .git）。
+    只含 .git（git 仓目录或 worktree 的 .git 指针文件）的目录视为空，
+    允许在已有的 git 空仓上 init。git init 本身幂等，重跑无害。
+    """
+    return all(entry.name == ".git" for entry in path.iterdir())
+
+
 def init(path: Path, git: bool = True) -> Path:
     """初始化 workspace 根。返回 path"""
     path = path.resolve()
     if path.exists():
-        if any(path.iterdir()):
+        if not _is_effectively_empty(path):
             raise WorkspaceExists(
                 f"路径已存在且非空: {path}",
-                hint="指定空目录或先备份内容",
+                hint="指定空目录或先备份内容（仅含 .git 的 git 空仓可直接 init）",
             )
     else:
         path.mkdir(parents=True)

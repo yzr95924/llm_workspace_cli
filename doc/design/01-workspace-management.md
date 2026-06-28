@@ -10,7 +10,7 @@
 | --- | --- |
 | `--workspace PATH`（全局 flag） | 用户显式指定，最高优先级 |
 | `$LLMW_WORKSPACE` 环境变量 | 用户通过 env 配置 |
-| `~/yzr_llm_workspace`（默认） | 硬编码兜底 |
+| `~/yzr_llm_wiki_workspace`（默认） | 硬编码兜底 |
 
 解析逻辑由 `llmw.config.resolve_workspace_root()` 统一负责；任一命令运行前
 调用一次，失败抛 `WorkspaceNotFound`（详见 `06-error-handling.md`）。
@@ -113,7 +113,7 @@ llmw config unset KEY              # 删除（仅允许删除可空字段）
 ```
 $ llmw config
 
-workspace 配置项 (/home/user/yzr_llm_workspace/workspace.toml):
+workspace 配置项 (/home/user/yzr_llm_wiki_workspace/workspace.toml):
 
   1. default_model         (str, 当前: <unset>)
   2. templates_version     (str, 只读, 当前: "1")

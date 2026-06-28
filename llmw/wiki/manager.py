@@ -14,7 +14,7 @@ from llmw.errors import (
 )
 from llmw._compat import TOMLDecodeError
 from llmw.models.resolve import resolve_for_wiki
-from llmw.models.store import RegistryMissing, load as models_load
+from llmw.models.store import RegistryMissing, load
 from llmw.config import skill_setup_script
 from llmw.fsutil import now_iso8601, safe_rmtree
 from llmw.wiki import store as wiki_store
@@ -130,7 +130,7 @@ def add(
     # Phase 2: 校验 model_id 存在于 registry
     if model is not None:
         try:
-            reg = models_load(workspace_root)
+            reg = load(workspace_root)
         except RegistryMissing:
             raise ModelDefaultNotSet(
                 "workspace 还没有 registry, 无法校验 model",
@@ -378,7 +378,7 @@ def wiki_config_set(workspace_root: Path, name: str, key: str, value: str) -> No
         meta.tags = new_tags
     elif key == "model":
         try:
-            reg = models_load(workspace_root)
+            reg = load(workspace_root)
         except RegistryMissing:
             raise ModelDefaultNotSet(
                 "workspace 还没有 registry, 无法校验 model",
@@ -477,24 +477,43 @@ def wiki_config_interactive(workspace_root: Path, name: str) -> None:
                 else:
                     break
             meta.tags = cur_tags
+        elif key == "model":
+            # model 是 registry 引用, 必须校验存在; 失败则提示重试, 不退出交互
+            # （与 wiki_config_set 行为一致, 但交互式走重试而非 raise, 避免丢失已填字段）
+            while True:
+                try:
+                    new_v = input("输入新值（回车跳过 / '-' 清空）: ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print()
+                    break  # 跳过, 不改动 model
+                if new_v == "":
+                    break  # 跳过
+                if new_v == "-":
+                    meta.model = None
+                    break
+                try:
+                    reg = load(workspace_root)
+                except RegistryMissing:
+                    print("    [校验失败] workspace 还没有 registry, 先 `llmw model add ...` 至少一条")
+                    continue
+                if new_v not in reg.models:
+                    avail = ", ".join(reg.models) or "(空)"
+                    print(f"    [校验失败] model_id '{new_v}' 不在 registry 中（可用: {avail}）")
+                    continue
+                meta.model = new_v
+                break
         else:
-            cur = getattr(meta, key) or ""
+            # display_name / description: 自由文本, 无校验
             try:
-                new_v = input(f"输入新值（回车跳过 / '-' 清空）: ").strip()
+                new_v = input("输入新值（回车跳过 / '-' 清空）: ").strip()
             except (EOFError, KeyboardInterrupt):
                 return
             if new_v == "":
                 pass
             elif new_v == "-":
-                if key == "model":
-                    meta.model = None
-                else:
-                    setattr(meta, key, "")
+                setattr(meta, key, "")
             else:
-                if key == "model":
-                    meta.model = new_v
-                else:
-                    setattr(meta, key, new_v)
+                setattr(meta, key, new_v)
         meta.bump()
         wiki_store.save(wiki_dir, meta)
         try:

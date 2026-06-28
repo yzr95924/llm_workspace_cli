@@ -6,5 +6,7 @@
 
 - [设计文档组织](design-docs-organization.md) — 设计文档统一放 `doc/`，按子功能拆成多份 markdown（不是单篇长文）
 - [记忆持久化策略](memory-persistence-policy.md) — 项目级记忆写仓库内 `MEMORY/`，跟随代码仓演进，不写个人 memory 目录
-- [model 操作不走环境变量](model-ops-no-env-vars.md) — model 配置完全由 `workspace_models.toml` + `llmw model` 命令管理，wiki 用 ID 引用，**不依赖任何环境变量**
+- [model 操作不走环境变量](model-ops-no-env-vars.md) — model 配置只从 `workspace_models.toml` 读（绝不读 `os.environ` 当真相源）；`enter` 向子进程注入 ANTHROPIC_* 是主动输出（值来自 registry）
+- [Claude Code settings env 优先级](claude-settings-env-precedence.md) — settings.json 的 `env` 块盖过 subprocess env；`enter` 用 `--setting-sources project,local` 规避；ANTHROPIC_MODEL 用 `name` 非 `model_id`
 - [测试优先级低](test-priority-low.md) — 当前阶段不写自动化测试，先跑通 prototype + 设计复核，prototype 跑通后再补 test
+- [CLI 参数传递约定](cli-ux-interactive-and-named-flags.md) — 配置类命令优先交互式；需用户指定的参数用命名 flag（`--xxx=`），不用裸位置参数

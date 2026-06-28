@@ -15,7 +15,7 @@
 - `llmw model add/list/show/remove/set-default/unset-default` 命令族
 - wiki→model 解析链（单一入口 `resolve.resolve_for_wiki()`）
 - `wiki add --model` / `wiki config set model` 写入时校验 `model_id` 存在于 registry
-- `enter` 在启动 claude 子进程时通过 `env=` 注入 `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN`
+- `enter` 在启动 claude 子进程时通过 `env=` 注入 `ANTHROPIC_MODEL`（值取 `name`）/ `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN`，并传 `--setting-sources project,local`（规避 `~/.claude/settings.json` env 块盖掉 overlay，见 §9.5）
 - `llmw init` 在 workspace 内写 `.gitignore` 片段 + `chmod 600` registry 文件
 - 新增错误类（见 §9.7）
 
@@ -87,16 +87,17 @@ schema_version = 2
 created_at = "2026-06-28T10:00:00Z"
 updated_at = "2026-06-28T10:15:00Z"
 
+# name = 网关模型名（注入 ANTHROPIC_MODEL 的值，网关只认这个），兼作显示
 [[models]]
 model_id  = "minimax-m3"
-name      = "MiniMax M3"
+name      = "MiniMax-M3[1m]"
 base_url  = "https://api.example.com"
 api_key   = "sk-..."
 is_default = true
 
 [[models]]
 model_id  = "claude-sonnet-4-6"
-name      = "Claude Sonnet 4.6"
+name      = "claude-sonnet-4-6"   # 官方 Anthropic 端点：name 即模型 id 本身
 base_url  = "https://api.anthropic.com"
 api_key   = "sk-ant-..."
 is_default = false
@@ -111,7 +112,7 @@ is_default = false
 | `updated_at` | ✅ | ISO8601 string | 任何 `save()` 后自动 bump |
 | `[[models]]` | — | array of table | 可为空（空 registry 视作 `ModelDefaultNotSet`） |
 | `models[].model_id` | ✅ | string | 小写字母 / 数字 / `-` / `_`，长度 1-64；全文件唯一 |
-| `models[].name` | ✅ | string | UTF-8，1-128 字符，人类可读展示名 |
+| `models[].name` | ✅ | string | UTF-8，1-128 字符；**网关模型名**（注入 `ANTHROPIC_MODEL` 的值，如 `MiniMax-M3[1m]`），兼作显示名。受 `model_id` 的 `^[a-z0-9_-]+$` 正则限制，含 `.`/`[` 等的网关名只能存这里 |
 | `models[].base_url` | ✅ | string | 必须以 `http://` 或 `https://` 开头 |
 | `models[].api_key` | ✅ | string | 非空，不校验格式（不透明串） |
 | `models[].is_default` | 隐式 `false` | bool | 同时最多一条为 `true` |
@@ -306,19 +307,27 @@ def resolve_for_wiki(workspace_root: Path, wiki_name: str) -> ModelEntry:
 
 ### Phase 2 契约变化
 
-env 不再完全透明——CLI 现在会注入 `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN`。为贴近"CLI 不动用户 env"的原则，**只显式设置这三个 key**，其他全部从 `os.environ` 透传。
+env 不再完全透明——CLI 现在会注入 `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN`。为贴近"CLI 不动用户 env"的原则，**只显式设置这三个 key**，其他全部从 `os.environ` 透传。其中 `ANTHROPIC_MODEL` 用 `model.name`（网关模型名），不是 `model_id`。
+
+#### 关键陷阱：settings.json 的 `env` 块优先级高于 subprocess env
+
+Claude Code 启动时会把 `~/.claude/settings.json` 的 `env` 块**盖到子进程继承的进程 env 之上**（官方优先级：Managed > CLI args > Local > Project > User）。因此 `subprocess.run(env=full_env)` 注入的 `ANTHROPIC_*` 会被用户全局 `~/.claude/settings.json` 的 `env` 块（如 `ANTHROPIC_MODEL=glm-5.2[1m]`）盖回——**只靠覆盖子进程 env 赢不了**。`enter` 必须额外传 `--setting-sources project,local`，让 claude 不加载 user 源，overlay 才生效（详见 `MEMORY/claude-settings-env-precedence.md`）。
+
+> 代价：wiki 会话丢掉 user 级 `enabledPlugins` / `theme` / `statusLine`；项目级 MCP/plugin 靠 cwd（wiki 子目录）的 `.mcp.json` / `.claude/settings.json` 加载，可用 symlink 把 workspace 级共享配置投进各 wiki 子目录。
 
 ### 实现
 
 ```python
 def _build_cmd_and_env(wiki_path: Path, ws_root: Path, name: str):
     model = resolve.resolve_for_wiki(ws_root, name)  # 抛 ModelNotInRegistry / ModelDefaultNotSet
-    cmd = ["claude", "--add-dir", str(wiki_path)]
+    # --setting-sources project,local：不加载 user 源，否则 ~/.claude/settings.json 的 env 块
+    # （如全局固定的 ANTHROPIC_*）会盖掉下面的 per-wiki overlay（settings env 优先级 > subprocess env）
+    cmd = ["claude", "--add-dir", str(wiki_path), "--setting-sources", "project,local"]
     prompt = _read_system_prompt(wiki_path)
     if prompt is not None:
         cmd += ["--system-prompt", prompt]
     env_overlay = {
-        "ANTHROPIC_MODEL":      model.model_id,
+        "ANTHROPIC_MODEL":      model.name,   # 网关模型名（如 MiniMax-M3[1m]），非 model_id slug
         "ANTHROPIC_BASE_URL":   model.base_url,
         "ANTHROPIC_AUTH_TOKEN": model.api_key,
     }
@@ -336,7 +345,7 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
         print(f"[llmw] resolved model: {model.name} ({model.model_id})", file=sys.stdout)
         source = "wiki override" if meta and meta.model else "registry default"
         print(f"[llmw] source: {source}", file=sys.stdout)
-        print(f"[llmw] ANTHROPIC_MODEL      = {model.model_id}", file=sys.stdout)
+        print(f"[llmw] ANTHROPIC_MODEL      = {model.name}", file=sys.stdout)
         print(f"[llmw] ANTHROPIC_BASE_URL   = {model.base_url}", file=sys.stdout)
         print(f"[llmw] ANTHROPIC_AUTH_TOKEN = {redact_api_key(model.api_key)}", file=sys.stdout)
         # ... 既有 cmd / env 描述 ...
@@ -355,16 +364,16 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
 
 ```
 $ llmw wiki --name=llm-systems enter --dry-run
-[llmw] workspace: /home/user/yzr_llm_workspace
-[llmw] wiki:      llm-systems (/home/user/yzr_llm_workspace/llm-systems)
-[llmw] resolved model: MiniMax M3 (minimax-m3)
+[llmw] workspace: /home/user/yzr_llm_wiki_workspace
+[llmw] wiki:      llm-systems (/home/user/yzr_llm_wiki_workspace/llm-systems)
+[llmw] resolved model: MiniMax-M3[1m] (minimax-m3)
 [llmw] source: registry default
-[llmw] ANTHROPIC_MODEL      = minimax-m3
+[llmw] ANTHROPIC_MODEL      = MiniMax-M3[1m]
 [llmw] ANTHROPIC_BASE_URL   = https://api.example.com
 [llmw] ANTHROPIC_AUTH_TOKEN = sk-...XYZW
 [llmw] CLAUDE.md: ✓ found (3042 bytes)
 [llmw] cmd:
-  claude --add-dir /home/user/yzr_llm_workspace/llm-systems --system-prompt "$(cat ...)"
+  claude --add-dir /home/user/yzr_llm_wiki_workspace/llm-systems --setting-sources project,local --system-prompt "$(cat ...)"
 [llmw] --dry-run: 未执行
 ```
 

@@ -10,7 +10,6 @@ from llmw._compat import toml_loads, toml_dump
 from llmw.errors import (
     InvalidModelField,
     ModelDefaultAmbiguous,
-    ModelDefaultNotSet,
     ModelIdConflict,
     RegistryMissing,
     SchemaVersionUnsupported,
@@ -125,13 +124,8 @@ def load(workspace_root: Path) -> Registry:
             f"workspace_models.toml 中存在 {len(defaults)} 条 is_default=true: {defaults}",
             hint="运行 `llmw model set-default --model-id <ID>` 修复唯一性",
         )
-    if not defaults and models:
-        # 有 models 但无 default → ModelDefaultNotSet
-        raise ModelDefaultNotSet(
-            "workspace_models.toml 中没有 is_default=true 的条目",
-            hint="运行 `llmw model set-default --model-id <ID>` 标记默认",
-        )
-
+    # 注：「有 models 但无 default」是合法中间状态（default 可后置），load 不对此抛错。
+    # 是否需要 default 由消费方判断（如 resolve_for_wiki 的 fallback）。
     return Registry(
         schema_version=sv,
         created_at=raw["created_at"],

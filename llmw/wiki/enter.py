@@ -42,18 +42,30 @@ def _read_system_prompt(wiki_path: Path):
 
 
 def _build_cmd(wiki_path: Path):
-    """构造 claude 子进程 argv。Phase 2 不变：--add-dir + 可选 --system-prompt。"""
+    """构造 claude 子进程 argv。
+
+    --add-dir + 可选 --system-prompt 不变。
+    --setting-sources project,local：不加载 user 源（~/.claude/settings.json）。否则其 env 块
+    （如全局固定的 ANTHROPIC_MODEL/BASE_URL/AUTH_TOKEN）会在 claude 启动时盖掉本命令注入的
+    per-wiki env overlay（见 _build_env_overlay）——Claude Code 的 settings env 块优先级高于
+    继承的进程环境变量。wiki 会话共享的 project 级配置（.mcp.json / .claude/settings.json）仍从
+    cwd（wiki 子目录）加载。
+    """
     prompt, _ = _read_system_prompt(wiki_path)
-    cmd = ["claude", "--add-dir", str(wiki_path)]
+    cmd = ["claude", "--add-dir", str(wiki_path), "--setting-sources", "project,local"]
     if prompt is not None:
         cmd += ["--system-prompt", prompt]
     return cmd, prompt
 
 
 def _build_env_overlay(model: ModelEntry) -> dict:
-    """Phase 2：显式注入 3 个 ANTHROPIC_* env（其他 key 从 os.environ 透传）。"""
+    """Phase 2：显式注入 3 个 ANTHROPIC_* env（其他 key 从 os.environ 透传）。
+
+    ANTHROPIC_MODEL 用 model.name（网关模型名，如 "MiniMax-M3[1m]" / "glm-5.2[1m]"），
+    不是 model_id（registry 内部 slug，如 minimax-m3-1m）——网关只认 name，slug 它不识别。
+    """
     return {
-        "ANTHROPIC_MODEL":      model.model_id,
+        "ANTHROPIC_MODEL":      model.name,
         "ANTHROPIC_BASE_URL":   model.base_url,
         "ANTHROPIC_AUTH_TOKEN": model.api_key,
     }
@@ -117,7 +129,7 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
         )
         source = "wiki override" if (meta and meta.model) else "registry default"
         print(f"[llmw] source: {source}", file=sys.stdout)
-        print(f"[llmw] ANTHROPIC_MODEL      = {model.model_id}", file=sys.stdout)
+        print(f"[llmw] ANTHROPIC_MODEL      = {model.name}", file=sys.stdout)
         print(f"[llmw] ANTHROPIC_BASE_URL   = {model.base_url}", file=sys.stdout)
         print(f"[llmw] ANTHROPIC_AUTH_TOKEN = {redact_api_key(model.api_key)}", file=sys.stdout)
         if claude_md.is_file():
@@ -129,11 +141,11 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
             print(f"[llmw] CLAUDE.md: ✗ missing", file=sys.stdout)
         if prompt is not None:
             cmd_display = (
-                f'claude --add-dir {wiki_path} '
+                f'claude --add-dir {wiki_path} --setting-sources project,local '
                 f'--system-prompt "$(cat {claude_md})"'
             )
         else:
-            cmd_display = f'claude --add-dir {wiki_path}'
+            cmd_display = f'claude --add-dir {wiki_path} --setting-sources project,local'
         print(f"[llmw] cmd:", file=sys.stdout)
         print(f"  {cmd_display}", file=sys.stdout)
         print(f"[llmw] env overlay: ANTHROPIC_MODEL/BASE_URL/AUTH_TOKEN（其他透传 os.environ）",

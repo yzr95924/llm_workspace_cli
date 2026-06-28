@@ -78,7 +78,7 @@ llmw wiki --name=llm-systems enter --dry-run
 
 ```
 $ llmw wiki --name=llm-systems add
-✓ 子目录已创建：/home/user/yzr_llm_workspace/llm-systems
+✓ 子目录已创建：/home/user/yzr_llm_wiki_workspace/llm-systems
 ✓ setup_wiki.py 已完成
 ✓ wiki_metadata.toml 已生成
 
@@ -154,7 +154,7 @@ $ llmw wiki --name=llm-systems add
 
 ```
 NAME              llm-systems
-PATH              /home/user/yzr_llm_workspace/llm-systems
+PATH              /home/user/yzr_llm_wiki_workspace/llm-systems
 TOPIC             LLM Systems
 DISPLAY_NAME      LLM 系统研究
 DESCRIPTION       跟踪 LLM 系统相关论文与博客
@@ -174,7 +174,7 @@ WIKI_DIR          ✓ found (47 pages)
 ```json
 {
   "name": "llm-systems",
-  "path": "/home/user/yzr_llm_workspace/llm-systems",
+  "path": "/home/user/yzr_llm_wiki_workspace/llm-systems",
   "topic": "LLM Systems",
   "display_name": "LLM 系统研究",
   "description": "跟踪 LLM 系统相关论文与博客",
@@ -270,7 +270,7 @@ llmw wiki --name=<name> config                # 无参数 + TTY → 交互模式
 ```
 $ llmw wiki --name=llm-systems config
 
-wiki "llm-systems" 配置项 (/home/user/yzr_llm_workspace/llm-systems/wiki_metadata.toml):
+wiki "llm-systems" 配置项 (/home/user/yzr_llm_wiki_workspace/llm-systems/wiki_metadata.toml):
 
   1. display_name      (str, 当前: "LLM 系统研究")
   2. description        (str, 当前: "跟踪 LLM 系统相关论文与博客")
