@@ -6,45 +6,63 @@ from llmw import __version__
 from llmw.errors import LlmwError, InternalError, format_error
 
 
+def _common_flags() -> argparse.ArgumentParser:
+    """全局 flag 的共享 parent。
+
+    经 ``parents=[_common_flags()]`` 同时挂到主 parser 与每个子 parser，使全局 flag
+    既可写在子命令前（``llmw --json list``）也可写在子命令后（``llmw list --json``，
+    spec §3.1 / 设计 01 §1.3）。``default=SUPPRESS`` 是关键：子 parser 解析时若用户
+    没在该位置传该 flag，就不写入 namespace，从而不会用默认值覆盖主 parser 已解析
+    到的同名值（argparse 子 parser 默认会 clobber）。故读取处须用 ``getattr``。
+    """
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--workspace", metavar="PATH", default=argparse.SUPPRESS,
+        help="workspace 根路径 (默认: $LLMW_WORKSPACE 或 ~/yzr_llm_workspace)",
+    )
+    common.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="全局: 输出 JSON 格式")
+    common.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
+                        help="全局: 打印 traceback")
+    common.add_argument("--quiet", "-q", action="store_true", default=argparse.SUPPRESS,
+                        help="全局: 抑制 INFO")
+    return common
+
+
 def build_parser() -> argparse.ArgumentParser:
+    common = _common_flags()
     parser = argparse.ArgumentParser(
         prog="llmw",
         description="Wiki workspace CLI (manage wikis under one git repo)",
+        parents=[common],
     )
     parser.add_argument("--version", action="version", version=f"llmw {__version__}")
-    parser.add_argument(
-        "--workspace", metavar="PATH", default=None,
-        help="workspace 根路径 (默认: $LLMW_WORKSPACE 或 ~/yzr_llm_workspace)",
-    )
-    parser.add_argument("--json", action="store_true", help="全局: 输出 JSON 格式")
-    parser.add_argument("--debug", action="store_true", help="全局: 打印 traceback")
-    parser.add_argument("--quiet", "-q", action="store_true", help="全局: 抑制 INFO")
 
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     # ===== workspace 级 =====
-    p_init = sub.add_parser("init", help="初始化 workspace")
+    p_init = sub.add_parser("init", help="初始化 workspace", parents=[common])
     p_init.add_argument("--path", metavar="PATH", default=None)
     p_init.add_argument("--git", action="store_true", default=True)
     p_init.add_argument("--no-git", dest="git", action="store_false")
 
-    p_config = sub.add_parser("config", help="workspace.toml 读写")
+    p_config = sub.add_parser("config", help="workspace.toml 读写", parents=[common])
     p_config.add_argument("action", nargs="?", default=None, choices=[None, "get", "set", "unset"])
     p_config.add_argument("key", nargs="?", default=None)
     p_config.add_argument("value", nargs="?", default=None)
 
-    p_list = sub.add_parser("list", help="列出 wiki")
+    p_list = sub.add_parser("list", help="列出 wiki", parents=[common])
     p_list.add_argument("--tag", action="append", default=[], metavar="TAG",
                         help="仅列出含此 tag 的 wiki (可重复, AND 关系)")
 
     # ===== wiki 级 =====
-    p_wiki = sub.add_parser("wiki", help="wiki 子命令")
+    p_wiki = sub.add_parser("wiki", help="wiki 子命令", parents=[common])
     p_wiki.add_argument("--name", required=True, metavar="NAME",
                         help="目标 wiki 名")
     wiki_sub = p_wiki.add_subparsers(dest="wiki_action", metavar="ACTION")
 
     # add
-    pw_add = wiki_sub.add_parser("add", help="新建 wiki")
+    pw_add = wiki_sub.add_parser("add", help="新建 wiki", parents=[common])
     pw_add.add_argument("--topic", default=None)
     pw_add.add_argument("--display-name", default=None, dest="display_name")
     pw_add.add_argument("--description", default=None)
@@ -53,22 +71,22 @@ def build_parser() -> argparse.ArgumentParser:
     pw_add.add_argument("--no-setup", action="store_true", dest="no_setup")
 
     # remove
-    pw_rm = wiki_sub.add_parser("remove", help="移除 wiki")
+    pw_rm = wiki_sub.add_parser("remove", help="移除 wiki", parents=[common])
     pw_rm.add_argument("--purge", action="store_true")
     pw_rm.add_argument("--yes", "-y", action="store_true")
 
     # show
-    pw_show = wiki_sub.add_parser("show", help="查看 wiki 详情")
+    pw_show = wiki_sub.add_parser("show", help="查看 wiki 详情", parents=[common])
 
     # config (sub: get / set / unset)
-    pw_cfg = wiki_sub.add_parser("config", help="读写 wiki_metadata.toml")
+    pw_cfg = wiki_sub.add_parser("config", help="读写 wiki_metadata.toml", parents=[common])
     pw_cfg.add_argument("cfg_action", nargs="?", default=None,
                         choices=[None, "get", "set", "unset"])
     pw_cfg.add_argument("cfg_key", nargs="?", default=None)
     pw_cfg.add_argument("cfg_value", nargs="?", default=None)
 
     # enter
-    pw_enter = wiki_sub.add_parser("enter", help="启动 Claude Code session")
+    pw_enter = wiki_sub.add_parser("enter", help="启动 Claude Code session", parents=[common])
     pw_enter.add_argument("--dry-run", action="store_true", dest="dry_run")
 
     return parser
@@ -88,7 +106,7 @@ def main(argv=None) -> int:
 
         # 下列命令需要先解析 workspace_root
         from llmw.config import resolve_workspace_root
-        ws_root = resolve_workspace_root(args.workspace)
+        ws_root = resolve_workspace_root(getattr(args, "workspace", None))
 
         if args.command == "config":
             from llmw.workspace.manager import (
@@ -107,7 +125,8 @@ def main(argv=None) -> int:
 
         if args.command == "list":
             from llmw.workspace.manager import list_wikis
-            return list_wikis(ws_root, as_json=args.json, tag_filter=args.tag or None)
+            return list_wikis(ws_root, as_json=getattr(args, "json", False),
+                              tag_filter=args.tag or None)
 
         if args.command == "wiki":
             from llmw.wiki.manager import (
@@ -126,7 +145,7 @@ def main(argv=None) -> int:
             elif wa == "remove":
                 wiki_rm(ws_root, args.name, purge=args.purge, yes=args.yes)
             elif wa == "show":
-                wiki_show(ws_root, args.name, as_json=args.json)
+                wiki_show(ws_root, args.name, as_json=getattr(args, "json", False))
             elif wa == "config":
                 if args.cfg_action is None:
                     wiki_config_interactive(ws_root, args.name)
@@ -146,10 +165,10 @@ def main(argv=None) -> int:
             return 0
 
     except LlmwError as e:
-        print(format_error(e, debug=args.debug), file=sys.stderr)
+        print(format_error(e, debug=getattr(args, "debug", False)), file=sys.stderr)
         return e.exit_code
     except Exception as e:
-        if args.debug:
+        if getattr(args, "debug", False):
             raise
         print(format_error(InternalError(str(e)), debug=False), file=sys.stderr)
         return 3
