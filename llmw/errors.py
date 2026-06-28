@@ -112,6 +112,43 @@ class PythonUnavailable(LlmwError):
     user_message = "sys.executable 不可执行"
 
 
+# ===== model registry 错误 (exit_code = 1) =====
+
+class ModelNotInRegistry(LlmwError):
+    exit_code = 1
+    user_message = "wiki 引用了不存在的 model_id"
+
+
+class ModelDefaultNotSet(LlmwError):
+    exit_code = 1
+    user_message = "workspace 没有默认 model"
+
+
+class ModelDefaultAmbiguous(LlmwError):
+    exit_code = 1
+    user_message = "registry 存在多条 is_default=true, 数据损坏"
+
+
+class ModelIdConflict(LlmwError):
+    exit_code = 1
+    user_message = "model_id 已存在"
+
+
+class ModelIsDefault(LlmwError):
+    exit_code = 1
+    user_message = "目标 model 是默认, 不能直接 remove"
+
+
+class InvalidModelField(LlmwError):
+    exit_code = 1
+    user_message = "model 字段值非法"
+
+
+class RegistryMissing(LlmwError):
+    exit_code = 1
+    user_message = "workspace_models.toml 不存在"
+
+
 # ===== 内部错误 (exit_code = 3) =====
 
 class InternalError(LlmwError):
