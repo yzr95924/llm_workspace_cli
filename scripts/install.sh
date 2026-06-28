@@ -26,6 +26,17 @@ select_rc() {
 
 # 脚本在 scripts/，仓库根是其上一级；不依赖 readlink -f（兼容 macOS bash 3.2）
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "install.sh: 未找到 python3（需要 Python 3.7+）。请先安装 python3 再重试。" >&2
+  exit 1
+fi
+
+# Python < 3.11 运行时需要 tomli；只提示，不自动安装
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)' >/dev/null 2>&1; then
+  echo "install.sh: 注意 Python < 3.11，运行时可能需要 tomli（pip install 'tomli>=1.1'）。继续安装。" >&2
+fi
+
 bin_dir="$HOME/.local/bin"
 
 mkdir -p "$bin_dir"

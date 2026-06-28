@@ -46,6 +46,16 @@ run_llmw() {
   LLMW_CODE=$?
 }
 
+# 构造一个只有常用工具、没有 python3 的 PATH 目录
+make_fakebin_no_python3() {
+  local fb="$TMPHOME/fakebin"; mkdir -p "$fb"
+  local t p
+  for t in mkdir chmod rm cat grep awk uname mktemp mv dirname printf bash; do
+    p="$(command -v "$t" 2>/dev/null)" && ln -s "$p" "$fb/$t"
+  done
+  printf '%s' "$fb"
+}
+
 # ---- 测试用例 ----
 test_install_creates_wrapper() {
   run_install /bin/zsh "$PYDIR:/usr/bin:/bin"
@@ -89,6 +99,13 @@ test_reinstall_overwrites_wrapper() {
   assert_not_contains "$TMPHOME/.local/bin/llmw" "SENTINEL_BEFORE"
   assert_contains "$TMPHOME/.local/bin/llmw" "python3 -m llmw"
 }
+test_install_fails_without_python3() {
+  local fb; fb="$(make_fakebin_no_python3)"
+  HOME="$TMPHOME" SHELL=/bin/zsh PATH="$fb" bash "$INSTALL" >"$TMPHOME/inst.out" 2>&1
+  local code=$?
+  [ "$code" != 0 ] || { echo "      期望非零退出，实际 0"; cat "$TMPHOME/inst.out"; exit 1; }
+  assert_contains "$TMPHOME/inst.out" "python3"
+}
 
 # ---- runner ----
 TESTS=(
@@ -99,6 +116,7 @@ TESTS=(
   test_no_marker_when_bin_in_path
   test_install_idempotent_no_dup_marker
   test_reinstall_overwrites_wrapper
+  test_install_fails_without_python3
 )
 
 run_test() {
