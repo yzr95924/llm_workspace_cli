@@ -143,21 +143,23 @@ def load(workspace_root: Path) -> Registry:
     # 6. 返回 Registry dataclass
 ```
 
-### 写时不变量（`save` 强制）
+### 写时不变量（`save` 不重复校验）
 
-调用方可以在内存中构造任意 `Registry` 对象；但 `set_default(registry, model_id)` 必须在内存层做：
+调用方可以在内存中构造任意 `Registry` 对象；`save()` 只做序列化，不重复校验 `is_default` 唯一性——避免每次 `save` 多余扫描。该约束由两个集中入口保证：
 
 ```python
 def set_default(reg: Registry, model_id: str) -> None:
+    """manager 层暴露的统一函数：保证 is_default 全局唯一。
+    add --default 与 set-default 都走它，避免双入口状态不一致。"""
     if model_id not in reg.models:
         raise ModelNotInRegistry(...)
     for m in reg.models.values():
         m.is_default = False
     reg.models[model_id].is_default = True
-    reg.bump()  # 更新 updated_at
+    reg.bump()
 ```
 
-`save()` 不再校验 is_default 唯一性——该约束在 `set_default` 函数里保证，避免每次 `save` 重复扫描。
+`add --default` 流程：先 `model_add(reg, ...)`（仅做"无此 id" + 字段校验 + 追加到 dict）→ 再 `set_default(reg, model_id)`（保证唯一性 + bump）。两步都通过后才 `save()`。
 
 ### 缺失 registry 文件
 
@@ -176,7 +178,7 @@ def set_default(reg: Registry, model_id: str) -> None:
 | `llmw model show` | `--model-id ID` | `--json` | 展示单条详情（`api_key` 脱敏） |
 | `llmw model set-default` | `--model-id ID` | — | 把指定条目设为默认（旧默认自动取消） |
 | `llmw model unset-default` | — | — | 把所有 `is_default` 清为 `false`（边界场景，之后 `enter` 会报 `ModelDefaultNotSet`） |
-| `llmw model remove` | `--model-id ID` | `--yes`（非 TTY 必需） | 删除条目；不能删除当前 `is_default=true` 的条目（先 `set-default` 别的或 `unset-default`） |
+| `llmw model remove` | `--model-id ID` | `--yes`（非 TTY 必需） | 删除条目；若目标条目 `is_default=true` → 报 `ModelIsDefault`，先 `set-default` 别的或 `unset-default` |
 
 ### TTY / 非 TTY 行为
 
@@ -370,25 +372,16 @@ $ llmw wiki --name=llm-systems enter --dry-run
 
 ## 9.6 `.gitignore` 与文件权限
 
-### 顶层 `.gitignore`（仓库级，由用户维护）
-
-用户根 `.gitignore` 加：
-
-```
-# llmw: model registry — 含 API key, 机器本地
-workspace_models.toml
-```
-
-### Workspace 级 `.gitignore`（由 `llmw init` 生成）
-
-`llmw init` 在创建 workspace 根时，自动写一个 workspace 级 `.gitignore`：
+`llmw init` 在 workspace 根创建以下 `.gitignore`（workspace 本身就是 git 仓——参见 `01-workspace-management.md`）：
 
 ```gitignore
 # llmw: machine-local files
 workspace_models.toml
 ```
 
-即便用户的仓库根 `.gitignore` 不覆盖到本路径，workspace 级 `.gitignore` 也能兜底。
+这一份 gitignore 已经覆盖 workspace 根路径下的 `workspace_models.toml`，不需要用户额外配置。命名上不再区分"顶层"与"workspace 级"——只有一个文件，由 CLI 维护。
+
+如果用户的 workspace 嵌在更大 monorepo 里（非 `llmw init --git` 默认行为），workspace 级 `.gitignore` 仍然有效（git 自下而上匹配 `.gitignore`）。
 
 ### `chmod 600`
 
@@ -421,7 +414,8 @@ os.chmod(toml_path, 0o600)
 | `ModelDefaultNotSet` | 1 | registry 空 / 无 is_default=true | 跑 `llmw model add --default ...` 或 `llmw model set-default --model-id X` |
 | `ModelDefaultAmbiguous` | 1 | 多条 is_default=true（数据损坏） | 跑 `llmw model set-default --model-id X` 修复 |
 | `ModelIdConflict` | 1 | add / set-default 引用已存在的 model_id | 换个 model_id 或先 remove 旧的 |
-| `InvalidModelField` | 1 | 正则 / 格式 / 长度校验失败 | 见具体 message（按字段给出规则） |
+| `ModelIsDefault` | 1 | remove 试图删除 `is_default=true` 的条目 | 先 `set-default` 别的，或 `unset-default` 后再 remove |
+| `InvalidModelField` | 1 | 字段校验失败（`model_id` 正则 / `name` 长度 / `base_url` 协议 / `api_key` 非空） | 见具体 message，message 内含字段名与规则 |
 
 `RegistryMissing`（registry 文件不存在）由 `resolve.py` 内部捕获，转化为 `ModelDefaultNotSet`（带特殊 hint）。**不直接抛 `RegistryMissing` 给用户**——避免用户看到一个新错误类名不知道做什么。
 
