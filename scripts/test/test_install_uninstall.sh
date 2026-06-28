@@ -62,12 +62,29 @@ test_wrapper_embeds_repo() {
   assert_contains "$TMPHOME/.local/bin/llmw" "PYTHONPATH="
   assert_contains "$TMPHOME/.local/bin/llmw" "python3 -m llmw"
 }
+test_marker_written_when_bin_not_in_path() {
+  run_install /bin/zsh "$PYDIR:/usr/bin:/bin"
+  [ "$INST_CODE" = 0 ] || { cat "$TMPHOME/inst.out"; exit 1; }
+  assert_exists "$TMPHOME/.zshrc"
+  assert_contains "$TMPHOME/.zshrc" "# >>> llmw (managed by install.sh) >>>"
+  assert_contains "$TMPHOME/.zshrc" "# <<< llmw <<<"
+  assert_contains "$TMPHOME/.zshrc" '$HOME/.local/bin'
+}
+test_no_marker_when_bin_in_path() {
+  run_install /bin/zsh "$TMPHOME/.local/bin:$PYDIR:/usr/bin:/bin"
+  [ "$INST_CODE" = 0 ] || { cat "$TMPHOME/inst.out"; exit 1; }
+  if [ -e "$TMPHOME/.zshrc" ]; then
+    assert_not_contains "$TMPHOME/.zshrc" "# >>> llmw (managed by install.sh) >>>"
+  fi
+}
 
 # ---- runner ----
 TESTS=(
   test_install_creates_wrapper
   test_wrapper_runs_help
   test_wrapper_embeds_repo
+  test_marker_written_when_bin_not_in_path
+  test_no_marker_when_bin_in_path
 )
 
 run_test() {

@@ -10,6 +10,20 @@ usage: ./scripts/install.sh
 USG
 }
 
+# 按 $SHELL 选目标 rc（启发式；macOS bash 为 login → .bash_profile）
+select_rc() {
+  local sh="${SHELL:-/bin/sh}"
+  sh="${sh##*/}"
+  case "$sh" in
+    zsh)  printf '%s/.zshrc' "$HOME" ;;
+    bash)
+      if [ "$(uname)" = "Darwin" ]; then printf '%s/.bash_profile' "$HOME"
+      else printf '%s/.bashrc' "$HOME"; fi ;;
+    fish) printf '%s/.config/fish/config.fish' "$HOME" ;;
+    *)    printf '%s/.profile' "$HOME" ;;
+  esac
+}
+
 # 脚本在 scripts/，仓库根是其上一级；不依赖 readlink -f（兼容 macOS bash 3.2）
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 bin_dir="$HOME/.local/bin"
@@ -25,4 +39,27 @@ exec python3 -m llmw "\$@"
 EOF
 chmod +x "$bin_dir/llmw"
 
+# --- 按 PATH 现状决定是否注册 marker 块 ---
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) already=1 ;;
+  *) already=0 ;;
+esac
+
+rc_file="$(select_rc)"
+if [ "$already" = 0 ]; then
+  mkdir -p "$(dirname "$rc_file")"
+  cat >> "$rc_file" <<'BLOCK'
+# >>> llmw (managed by install.sh) >>>
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) PATH="$HOME/.local/bin:$PATH"; export PATH ;;
+esac
+# <<< llmw <<<
+BLOCK
+  wrote_rc=1
+fi
+
 echo "已安装 llmw -> $bin_dir/llmw"
+if [ "${wrote_rc:-0}" = 1 ]; then
+  echo "已写入 PATH 到 ${rc_file}；请运行 source ${rc_file} 或重开终端使其生效。"
+fi
