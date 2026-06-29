@@ -117,6 +117,12 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
         print(f"[llmw]   ANTHROPIC_MODEL      = {model.name}", file=sys.stdout)
         print(f"[llmw]   ANTHROPIC_BASE_URL   = {model.base_url}", file=sys.stdout)
         print(f"[llmw]   ANTHROPIC_AUTH_TOKEN = {redact_api_key(model.api_key)}", file=sys.stdout)
+        # Habit template（非用户可配的代码内常量, 随 overlay 一同写入）
+        print(f"[llmw]   (habit template)", file=sys.stdout)
+        # 用最长 key 长度对齐 value 列（habit template 组内对齐, 不与 model env 共享列）
+        width = max(len(k) for k in overlay._HABIT_TEMPLATE)
+        for k, v in overlay._HABIT_TEMPLATE.items():
+            print(f"[llmw]     {k:{width}s} = {v}", file=sys.stdout)
         if claude_md.is_file():
             print(
                 f"[llmw] CLAUDE.md: ✓ found ({claude_md.stat().st_size} bytes)",
@@ -132,11 +138,16 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
             cmd_display = f"claude --add-dir {wiki_path}"
         print(f"[llmw] cmd:", file=sys.stdout)
         print(f"  {cmd_display}", file=sys.stdout)
+        print(f"[llmw] env: LLM_WIKI_ROOT={wiki_path}", file=sys.stdout)
         print(f"[llmw] --dry-run: 未执行", file=sys.stdout)
         return 0
 
     # 真正执行：lazy 写 overlay（Local 层）→ subprocess 透传 os.environ（无 env overlay，无 --setting-sources）
     overlay.apply(wiki_path, model)
     os.chdir(wiki_path)
-    result = subprocess.run(cmd)
+    # 注入 LLM_WIKI_ROOT,让 SKILL 在外部 session 也能定位当前 wiki
+    # (SKILL.md:57,126,208,333 + claude-md-template.md:11,146 + scripts/ingest_diff.py:215
+    #  + lint-checklist.md:15,17 一致期望该环境变量)。用 env= 显式传避免污染父进程 os.environ。
+    subprocess_env = {**os.environ, "LLM_WIKI_ROOT": str(wiki_path)}
+    result = subprocess.run(cmd, env=subprocess_env)
     return result.returncode

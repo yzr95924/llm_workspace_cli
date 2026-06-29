@@ -35,6 +35,12 @@ class WikiExists(LlmwError):
     user_message = "wiki 名重复"
 
 
+class WikiAlreadyInitialized(LlmwError):
+    """spec §8: 目标目录已含 CLAUDE.md 或 wiki/index.md,拒绝覆盖"""
+    exit_code = 1
+    user_message = "wiki 目录已初始化"
+
+
 class WikiDirMissing(LlmwError):
     exit_code = 1
     user_message = "wiki 子目录缺失"
@@ -87,14 +93,19 @@ class SkillMissing(LlmwError):
     user_message = "SKILL submodule 未初始化"
 
 
-class SkillScriptMissing(LlmwError):
-    exit_code = 2
-    user_message = "SKILL submodule 缺少 setup_wiki.py"
-
-
 class SetupFailed(LlmwError):
+    """wiki 初始化失败:模板缺失、渲染异常、atomic_write 失败等"""
     exit_code = 2
-    user_message = "setup_wiki.py 失败"
+    user_message = "wiki 初始化失败"
+
+
+class BackupFailed(LlmwError):
+    """wiki remove --purge 前的备份步骤失败(mv / mkdir 任一失败)
+
+    备份失败时不动 wiki;用户可加 --no-backup 跳过备份直接删。
+    """
+    exit_code = 2
+    user_message = "wiki 备份失败"
 
 
 class ClaudeNotFound(LlmwError):

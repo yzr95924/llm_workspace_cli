@@ -53,18 +53,24 @@ def repo_root() -> Path:
 
 
 def skill_setup_script() -> Path:
-    """解析 setup_wiki.py 路径
+    """保留旧 API 以防有外部调用；返回 None 表示已废弃
 
-    优先级:
-      1. $LLMW_SKILL_SETUP_SCRIPT env var
-      2. <repo>/my_SKILL/llm-wiki-management/scripts/setup_wiki.py
-
-    不存在 → 由调用方 raise SkillMissing / SkillScriptMissing
+    spec 0.2.0 起 wiki 创建由 CLI 内联实现(llmw.wiki.init_wiki),不再依赖
+    my_SKILL/.../scripts/setup_wiki.py。本函数保留以便旧代码导入不报错。
     """
-    env_path = os.environ.get("LLMW_SKILL_SETUP_SCRIPT")
-    if env_path:
-        return Path(env_path).resolve()
-    return repo_root() / "my_SKILL" / "llm-wiki-management" / "scripts" / "setup_wiki.py"
+    return None
+
+
+def wiki_spec_templates_dir() -> Path:
+    """SKILL 仓 references/ 目录路径(CLI 字节金标准的来源)
+
+    包含:
+      - claude-md-template.md (CLAUDE.md 拷贝模板)
+      - fixtures/index.md.txt / log.md.txt / memory-readme.txt / gitignore.txt
+
+    不存在 → 由调用方 raise SkillMissing
+    """
+    return repo_root() / "my_SKILL" / "llm-wiki-management" / "references"
 
 
 def templates_dir() -> Path:

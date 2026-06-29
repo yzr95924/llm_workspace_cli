@@ -93,11 +93,15 @@ def build_parser() -> argparse.ArgumentParser:
     pw_add.add_argument("--description", default=None)
     pw_add.add_argument("--tag", action="append", default=[], dest="tags")
     pw_add.add_argument("--model", default=None)
-    pw_add.add_argument("--no-setup", action="store_true", dest="no_setup")
+    pw_add.add_argument("--git", action="store_true", default=False,
+                        help="opt-in: 初始化 git 仓 (spec §7);默认不碰 git")
 
     # remove
     pw_rm = wiki_sub.add_parser("remove", help="移除 wiki", parents=[common])
-    pw_rm.add_argument("--purge", action="store_true")
+    pw_rm.add_argument("--purge", action="store_true",
+                       help="同时删除 wiki 子目录(默认先备份到 .llmw-trash/)")
+    pw_rm.add_argument("--no-backup", dest="backup", action="store_false",
+                       help="跳过 --purge 的备份步骤,直接 rmtree(CI / 脚本场景)")
     pw_rm.add_argument("--yes", "-y", action="store_true")
 
     # show
@@ -194,10 +198,11 @@ def main(argv=None) -> int:
                     ws_root, args.name,
                     topic=args.topic, display_name=args.display_name,
                     description=args.description, tags=args.tags or None,
-                    model=args.model, no_setup=args.no_setup,
+                    model=args.model, git=args.git,
                 )
             elif wa == "remove":
-                wiki_rm(ws_root, args.name, purge=args.purge, yes=args.yes)
+                wiki_rm(ws_root, args.name, purge=args.purge, yes=args.yes,
+                        no_backup=args.backup is False)
             elif wa == "show":
                 wiki_show(ws_root, args.name, as_json=getattr(args, "json", False))
             elif wa == "config":
