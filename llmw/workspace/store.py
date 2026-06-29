@@ -1,4 +1,5 @@
 """workspace.toml 读写 + schema 校验"""
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
@@ -13,6 +14,7 @@ SCHEMA_VERSION_SUPPORTED = 1
 @dataclass
 class WikiEntry:
     """workspace.toml [wikis.<name>] 表项"""
+
     name: str
     path: str
     created_at: str
@@ -21,6 +23,7 @@ class WikiEntry:
 @dataclass
 class WorkspaceToml:
     """workspace.toml 解析结果 (Phase 1 schema)"""
+
     schema_version: int
     created_at: str
     templates_version: str = "1"
@@ -84,6 +87,7 @@ def save(workspace_root: Path, ws: WorkspaceToml) -> None:
         data["wikis"] = wiki_table
 
     import io
+
     buf = io.StringIO()
     toml_dump(data, buf)
     atomic_write(toml_path, buf.getvalue())

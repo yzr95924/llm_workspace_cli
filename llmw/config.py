@@ -1,9 +1,8 @@
 """全局配置 + workspace 路径解析 + 包内路径定位"""
+
 import os
-import sys
 from pathlib import Path
 
-from llmw import __version__
 from llmw.errors import WorkspaceNotFound
 
 DEFAULT_WORKSPACE = Path.home() / "yzr_llm_wiki_workspace"
@@ -37,7 +36,7 @@ def resolve_workspace_root(
     if not (root / "workspace.toml").is_file():
         raise WorkspaceNotFound(
             hint=f"目录 {root} 不是 llmw workspace（缺少 workspace.toml）。"
-                 f"可运行 `llmw init --path {root}`",
+            f"可运行 `llmw init --path {root}`",
         )
     return root
 
@@ -64,7 +63,9 @@ def skill_setup_script() -> Path:
     env_path = os.environ.get("LLMW_SKILL_SETUP_SCRIPT")
     if env_path:
         return Path(env_path).resolve()
-    return repo_root() / "my_SKILL" / "llm-wiki-management" / "scripts" / "setup_wiki.py"
+    return (
+        repo_root() / "my_SKILL" / "llm-wiki-management" / "scripts" / "setup_wiki.py"
+    )
 
 
 def templates_dir() -> Path:

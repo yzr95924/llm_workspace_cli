@@ -1,4 +1,5 @@
 """文件系统原子写 + 辅助"""
+
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,4 +38,5 @@ def atomic_write(path: Path, content: str) -> None:
 def safe_rmtree(path: Path) -> None:
     """rm -rf 包装：失败由调用方处理（已存在的目录可能被外部占用）"""
     import shutil
+
     shutil.rmtree(path)

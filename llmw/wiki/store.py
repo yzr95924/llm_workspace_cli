@@ -1,4 +1,5 @@
 """wiki_metadata.toml 读写 + schema 校验 + 模板填充"""
+
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -87,6 +88,7 @@ def save(wiki_dir: Path, meta: WikiMetadata) -> None:
         data["model"] = meta.model
 
     import io
+
     buf = io.StringIO()
     toml_dump(data, buf)
     atomic_write(toml_path, buf.getvalue())
@@ -97,10 +99,11 @@ def create_skeleton(wiki_dir: Path, name: str, topic: str) -> WikiMetadata:
     template_path = templates_dir() / "wiki_metadata.toml.template"
     template = template_path.read_text(encoding="utf-8")
     now = now_iso8601()
-    text = (template
-            .replace("__NAME__", name)
-            .replace("__TOPIC__", topic)
-            .replace("__NOW_ISO8601__", now))
+    text = (
+        template.replace("__NAME__", name)
+        .replace("__TOPIC__", topic)
+        .replace("__NOW_ISO8601__", now)
+    )
 
     toml_path = wiki_dir / "wiki_metadata.toml"
     atomic_write(toml_path, text)

@@ -1,4 +1,5 @@
 """wiki 级业务: add / remove / show / config"""
+
 import json
 import subprocess
 import sys
@@ -6,11 +7,20 @@ from pathlib import Path
 from typing import List, Optional
 
 from llmw.errors import (
-    InvalidConfigKey, KeyNotUnsettable, MissingRequiredFlag,
-    ModelDefaultAmbiguous, ModelDefaultNotSet, ModelNotInRegistry,
-    PurgeRequiresConfirmation, SchemaVersionUnsupported, SetupFailed,
-    SkillMissing, SkillScriptMissing,
-    WikiDirMissing, WikiExists, WikiNotFound,
+    InvalidConfigKey,
+    KeyNotUnsettable,
+    MissingRequiredFlag,
+    ModelDefaultAmbiguous,
+    ModelDefaultNotSet,
+    ModelNotInRegistry,
+    PurgeRequiresConfirmation,
+    SchemaVersionUnsupported,
+    SetupFailed,
+    SkillMissing,
+    SkillScriptMissing,
+    WikiDirMissing,
+    WikiExists,
+    WikiNotFound,
 )
 from llmw._compat import TOMLDecodeError
 from llmw.models.resolve import resolve_for_wiki
@@ -49,8 +59,9 @@ def _ensure_skill_script() -> Path:
 
 def _interactive_fill_metadata(workspace_root, wiki_dir, meta):
     """交互填充 display_name / description / tags / model"""
+
     def ask(label, cur):
-        suffix = f" [当前: <未设置>]" if not cur else f" [当前: {cur!r}]"
+        suffix = " [当前: <未设置>]" if not cur else f" [当前: {cur!r}]"
         try:
             v = input(f"  {label}{suffix}: ").strip()
         except (EOFError, KeyboardInterrupt):
@@ -84,7 +95,7 @@ def _interactive_fill_metadata(workspace_root, wiki_dir, meta):
                 print("    (空)")
                 continue
             for i, t in enumerate(cur_tags):
-                print(f"      {i+1}. {t}")
+                print(f"      {i + 1}. {t}")
             try:
                 idx = int(input("    移除编号: ").strip()) - 1
                 if 0 <= idx < len(cur_tags):
@@ -147,10 +158,14 @@ def add(
     # 非 TTY 下: 必须所有 metadata flag 齐
     if not sys.stdin.isatty():
         missing = []
-        if display_name is None: missing.append("--display-name")
-        if description is None:  missing.append("--description")
-        if not tags:              missing.append("--tag")
-        if model is None:         missing.append("--model")
+        if display_name is None:
+            missing.append("--display-name")
+        if description is None:
+            missing.append("--description")
+        if not tags:
+            missing.append("--tag")
+        if model is None:
+            missing.append("--model")
         if missing:
             raise MissingRequiredFlag(
                 f"非 TTY 下 add 缺 metadata flag: {', '.join(missing)}",
@@ -200,25 +215,36 @@ def add(
         meta = wiki_store.load(wiki_dir)  # reload
     else:
         # 非 TTY: 一次性写入 flags
-        if display_name is not None: meta.display_name = display_name
-        if description is not None:  meta.description = description
-        if tags:                      meta.tags = tags
-        if model is not None:         meta.model = model
+        if display_name is not None:
+            meta.display_name = display_name
+        if description is not None:
+            meta.description = description
+        if tags:
+            meta.tags = tags
+        if model is not None:
+            meta.model = model
         meta.bump()
         wiki_store.save(wiki_dir, meta)
 
     # 注册到 workspace.toml
     ws.wikis[name] = ws_store.WikiEntry(
-        name=name, path=name, created_at=now_iso8601(),
+        name=name,
+        path=name,
+        created_at=now_iso8601(),
     )
     ws_store.save(workspace_root, ws)
 
     print(f"[llmw] wiki 已创建: {name} ({wiki_dir})", file=sys.stdout)
-    print(f"[llmw] 请 git add + commit 跟踪（建议 commit message: `wiki: add {name}`）", file=sys.stdout)
+    print(
+        f"[llmw] 请 git add + commit 跟踪（建议 commit message: `wiki: add {name}`）",
+        file=sys.stdout,
+    )
     return wiki_dir
 
 
-def remove(workspace_root: Path, name: str, purge: bool = False, yes: bool = False) -> None:
+def remove(
+    workspace_root: Path, name: str, purge: bool = False, yes: bool = False
+) -> None:
     ws = ws_store.load(workspace_root)
     if name not in ws.wikis:
         raise WikiNotFound(f"wiki '{name}' 不在当前 workspace 中")
@@ -232,7 +258,11 @@ def remove(workspace_root: Path, name: str, purge: bool = False, yes: bool = Fal
                 hint="加 --yes 或在 TTY 下手动确认",
             )
         try:
-            ans = input(f"将删除 {wiki_path} 子目录及所有内容，确认？[y/N]: ").strip().lower()
+            ans = (
+                input(f"将删除 {wiki_path} 子目录及所有内容，确认？[y/N]: ")
+                .strip()
+                .lower()
+            )
         except (EOFError, KeyboardInterrupt):
             print()
             ans = "n"
@@ -247,7 +277,10 @@ def remove(workspace_root: Path, name: str, purge: bool = False, yes: bool = Fal
         if wiki_path.is_dir():
             safe_rmtree(wiki_path)
 
-    print(f"[llmw] wiki '{name}' 已取消注册" + (" 并删除子目录" if purge else ""), file=sys.stdout)
+    print(
+        f"[llmw] wiki '{name}' 已取消注册" + (" 并删除子目录" if purge else ""),
+        file=sys.stdout,
+    )
 
 
 def show(workspace_root: Path, name: str, as_json: bool = False) -> None:
@@ -261,7 +294,10 @@ def show(workspace_root: Path, name: str, as_json: bool = False) -> None:
         try:
             meta = wiki_store.load(wiki_path)
         except (OSError, TOMLDecodeError, SchemaVersionUnsupported) as e:
-            print(f"[llmw] warning: 无法读取 wiki_metadata.toml: {type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"[llmw] warning: 无法读取 wiki_metadata.toml: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             meta = None
 
     claude_md_p = wiki_path / "CLAUDE.md"
@@ -269,7 +305,11 @@ def show(workspace_root: Path, name: str, as_json: bool = False) -> None:
     wiki_sub_p = wiki_path / "wiki"
     claude_md_exists = claude_md_p.is_file()
     raw_count = sum(1 for _ in raw_p.rglob("*") if _.is_file()) if raw_p.is_dir() else 0
-    wiki_count = sum(1 for _ in wiki_sub_p.rglob("*.md") if _.is_file()) if wiki_sub_p.is_dir() else 0
+    wiki_count = (
+        sum(1 for _ in wiki_sub_p.rglob("*.md") if _.is_file())
+        if wiki_sub_p.is_dir()
+        else 0
+    )
 
     # 通过 resolve 拿最终 model + 来源
     final_model = None
@@ -278,7 +318,13 @@ def show(workspace_root: Path, name: str, as_json: bool = False) -> None:
         m = resolve_for_wiki(workspace_root, name)
         final_model = m.model_id
         model_source = "wiki override" if (meta and meta.model) else "registry default"
-    except (WikiNotFound, WikiDirMissing, ModelNotInRegistry, ModelDefaultNotSet, ModelDefaultAmbiguous):
+    except (
+        WikiNotFound,
+        WikiDirMissing,
+        ModelNotInRegistry,
+        ModelDefaultNotSet,
+        ModelDefaultAmbiguous,
+    ):
         # resolve 失败 → 维持向后兼容：旧逻辑
         final_model = (meta.model if meta else None) or ws.default_model
         if final_model:
@@ -327,16 +373,20 @@ def show(workspace_root: Path, name: str, as_json: bool = False) -> None:
     print(f"MODEL             {model_line}")
     print(f"CLAUDE_MD         {'✓ found' if claude_md_exists else '✗ missing'}")
     print(f"WIKI_METADATA     {'✓ found' if meta else '✗ missing'}")
-    print(f"RAW_DIR           {'✓ found' if raw_p.is_dir() else '✗ missing'} ({raw_count} files)")
-    print(f"WIKI_DIR          {'✓ found' if wiki_sub_p.is_dir() else '✗ missing'} ({wiki_count} pages)")
+    print(
+        f"RAW_DIR           {'✓ found' if raw_p.is_dir() else '✗ missing'} ({raw_count} files)"
+    )
+    print(
+        f"WIKI_DIR          {'✓ found' if wiki_sub_p.is_dir() else '✗ missing'} ({wiki_count} pages)"
+    )
 
 
 # wiki config KEY 白名单
 WIKI_CONFIG_KEYS = {
-    "display_name": (True,  True,  str),
-    "description":  (True,  True,  str),
-    "tags":         (True,  True,  list),
-    "model":        (True,  True,  str),
+    "display_name": (True, True, str),
+    "description": (True, True, str),
+    "tags": (True, True, list),
+    "model": (True, True, str),
     # name / topic / schema_version / created_at / updated_at 全部只读
 }
 
@@ -422,7 +472,7 @@ def wiki_config_interactive(workspace_root: Path, name: str) -> None:
     meta = wiki_store.load(wiki_dir)
     keys = list(WIKI_CONFIG_KEYS.keys())
     while True:
-        print(f"\nwiki \"{name}\" 配置项 ({wiki_dir}/wiki_metadata.toml):")
+        print(f'\nwiki "{name}" 配置项 ({wiki_dir}/wiki_metadata.toml):')
         for i, key in enumerate(keys, 1):
             v = getattr(meta, key)
             cur = repr(v) if v else "<unset>"
@@ -459,9 +509,10 @@ def wiki_config_interactive(workspace_root: Path, name: str) -> None:
                             cur_tags.append(t)
                 elif op == "r":
                     if not cur_tags:
-                        print("(空)"); continue
+                        print("(空)")
+                        continue
                     for i2, t in enumerate(cur_tags):
-                        print(f"  {i2+1}. {t}")
+                        print(f"  {i2 + 1}. {t}")
                     try:
                         idx2 = int(input("移除编号: ").strip()) - 1
                         if 0 <= idx2 < len(cur_tags):
@@ -494,11 +545,15 @@ def wiki_config_interactive(workspace_root: Path, name: str) -> None:
                 try:
                     reg = load(workspace_root)
                 except RegistryMissing:
-                    print("    [校验失败] workspace 还没有 registry, 先 `llmw model add ...` 至少一条")
+                    print(
+                        "    [校验失败] workspace 还没有 registry, 先 `llmw model add ...` 至少一条"
+                    )
                     continue
                 if new_v not in reg.models:
                     avail = ", ".join(reg.models) or "(空)"
-                    print(f"    [校验失败] model_id '{new_v}' 不在 registry 中（可用: {avail}）")
+                    print(
+                        f"    [校验失败] model_id '{new_v}' 不在 registry 中（可用: {avail}）"
+                    )
                     continue
                 meta.model = new_v
                 break

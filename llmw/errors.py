@@ -1,9 +1,11 @@
 """llmw 自定义异常 + 错误格式化"""
+
 from typing import Optional
 
 
 class LlmwError(Exception):
     """所有 CLI 异常的基类"""
+
     exit_code: int = 1
     user_message: str = ""
 
@@ -14,6 +16,7 @@ class LlmwError(Exception):
 
 
 # ===== 用户错误 (exit_code = 1) =====
+
 
 class WorkspaceNotFound(LlmwError):
     exit_code = 1
@@ -82,6 +85,7 @@ class InvalidTagValue(LlmwError):
 
 # ===== 环境错误 (exit_code = 2) =====
 
+
 class SkillMissing(LlmwError):
     exit_code = 2
     user_message = "SKILL submodule 未初始化"
@@ -113,6 +117,7 @@ class PythonUnavailable(LlmwError):
 
 
 # ===== model registry 错误 (exit_code = 1) =====
+
 
 class ModelNotInRegistry(LlmwError):
     exit_code = 1
@@ -156,6 +161,7 @@ class OverlayFileUnparseable(LlmwError):
 
 # ===== 内部错误 (exit_code = 3) =====
 
+
 class InternalError(LlmwError):
     exit_code = 3
     user_message = "未预期的内部错误"
@@ -168,6 +174,7 @@ def format_error(err: LlmwError, debug: bool = False) -> str:
         lines.append(f"[llmw] hint: {err.hint}")
     if debug:
         import traceback
+
         lines.append("[llmw] traceback:")
         lines.append(traceback.format_exc())
     return "\n".join(lines)

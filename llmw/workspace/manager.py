@@ -1,12 +1,10 @@
 """workspace 级业务: init / config / list"""
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
 
-from llmw import __version__
 from llmw.errors import (
     ConfigKeyMissing,
     GitUnavailable,
@@ -21,7 +19,6 @@ from llmw.errors import (
     WorkspaceExists,
 )
 from llmw._compat import TOMLDecodeError
-from llmw.fsutil import now_iso8601
 from llmw.workspace import store as ws_store
 
 # config KEY 白名单: name -> (can_set, can_unset, type)
@@ -63,7 +60,9 @@ def _ensure_workspace_gitignore(workspace_root: Path) -> None:
         return
 
     text = gitignore.read_text(encoding="utf-8")
-    pattern = re.compile(re.escape(marker_start) + r".*?" + re.escape(marker_end), re.DOTALL)
+    pattern = re.compile(
+        re.escape(marker_start) + r".*?" + re.escape(marker_end), re.DOTALL
+    )
     m = pattern.search(text)
     if m:
         if m.group(0) == block:
@@ -81,11 +80,16 @@ def _ensure_workspace_gitignore(workspace_root: Path) -> None:
 
 
 def _is_effectively_empty(path: Path) -> bool:
-    """目录是否为空（忽略 git 元数据 .git）。
-    只含 .git（git 仓目录或 worktree 的 .git 指针文件）的目录视为空，
+    """目录是否为空（忽略 git 元数据 .git 与 .gitignore）。
+    只含 .git（git 仓目录或 worktree 的 .git 指针文件）和/或 .gitignore 的目录视为空，
     允许在已有的 git 空仓上 init。git init 本身幂等，重跑无害。
+
+    .gitignore 也忽略：它是 git 工作流的常规伴随文件，且正是 init 自身
+    （_ensure_workspace_gitignore）会写/维护的文件。若不忽略，llmw 写出的 .gitignore
+    会反过来挡住自身的 re-init（自反矛盾）。
     """
-    return all(entry.name == ".git" for entry in path.iterdir())
+    ignored = {".git", ".gitignore"}
+    return all(entry.name in ignored for entry in path.iterdir())
 
 
 def init(path: Path, git: bool = True) -> Path:
@@ -95,7 +99,7 @@ def init(path: Path, git: bool = True) -> Path:
         if not _is_effectively_empty(path):
             raise WorkspaceExists(
                 f"路径已存在且非空: {path}",
-                hint="指定空目录或先备份内容（仅含 .git 的 git 空仓可直接 init）",
+                hint="指定空目录或先备份内容（仅含 .git / .gitignore 的 git 空仓可直接 init）",
             )
     else:
         path.mkdir(parents=True)
@@ -236,7 +240,7 @@ def config_interactive(workspace_root: Path) -> None:
             continue
 
         cur = getattr(ws, key, None) or ""
-        prompt = f"输入新值（回车跳过 / '-' 清空）: "
+        prompt = "输入新值（回车跳过 / '-' 清空）: "
         try:
             new_val = input(prompt).strip()
         except (EOFError, KeyboardInterrupt):
@@ -300,7 +304,16 @@ def list_wikis(
                 if (meta and meta.model)
                 else "registry default",
             }
-        except (WikiNotFound, WikiDirMissing, ModelNotInRegistry, ModelDefaultNotSet, ModelDefaultAmbiguous, RegistryMissing, OSError, TOMLDecodeError):
+        except (
+            WikiNotFound,
+            WikiDirMissing,
+            ModelNotInRegistry,
+            ModelDefaultNotSet,
+            ModelDefaultAmbiguous,
+            RegistryMissing,
+            OSError,
+            TOMLDecodeError,
+        ):
             model_info = None
 
         rows.append(

@@ -4,6 +4,7 @@ Phase 2 交付（§9.5）：resolved model 通过写 <wiki>/.claude/settings.loc
 （Local 层，优先级 > User）交付，lazy on enter。不再注入 subprocess env、不再传
 --setting-sources——user 配置（~/.claude/settings.json）正常加载，overlay 在 Local 层稳赢。
 """
+
 import os
 import shutil
 import subprocess
@@ -11,7 +12,12 @@ import sys
 from pathlib import Path
 
 from llmw._compat import TOMLDecodeError
-from llmw.errors import ClaudeNotFound, SchemaVersionUnsupported, WikiDirMissing, WikiNotFound
+from llmw.errors import (
+    ClaudeNotFound,
+    SchemaVersionUnsupported,
+    WikiDirMissing,
+    WikiNotFound,
+)
 from llmw.models import overlay
 from llmw.models.redact import redact_api_key
 from llmw.models.resolve import resolve_for_wiki
@@ -116,23 +122,26 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
         print(f"[llmw] overlay file: {overlay_path}  {tag}", file=sys.stdout)
         print(f"[llmw]   ANTHROPIC_MODEL      = {model.name}", file=sys.stdout)
         print(f"[llmw]   ANTHROPIC_BASE_URL   = {model.base_url}", file=sys.stdout)
-        print(f"[llmw]   ANTHROPIC_AUTH_TOKEN = {redact_api_key(model.api_key)}", file=sys.stdout)
+        print(
+            f"[llmw]   ANTHROPIC_AUTH_TOKEN = {redact_api_key(model.api_key)}",
+            file=sys.stdout,
+        )
         if claude_md.is_file():
             print(
                 f"[llmw] CLAUDE.md: ✓ found ({claude_md.stat().st_size} bytes)",
                 file=sys.stdout,
             )
         else:
-            print(f"[llmw] CLAUDE.md: ✗ missing", file=sys.stdout)
+            print("[llmw] CLAUDE.md: ✗ missing", file=sys.stdout)
         if prompt is not None:
             cmd_display = (
                 f'claude --add-dir {wiki_path} --system-prompt "$(cat {claude_md})"'
             )
         else:
             cmd_display = f"claude --add-dir {wiki_path}"
-        print(f"[llmw] cmd:", file=sys.stdout)
+        print("[llmw] cmd:", file=sys.stdout)
         print(f"  {cmd_display}", file=sys.stdout)
-        print(f"[llmw] --dry-run: 未执行", file=sys.stdout)
+        print("[llmw] --dry-run: 未执行", file=sys.stdout)
         return 0
 
     # 真正执行：lazy 写 overlay（Local 层）→ subprocess 透传 os.environ（无 env overlay，无 --setting-sources）
