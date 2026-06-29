@@ -1,32 +1,23 @@
 """wiki 级业务: add / remove / show / config"""
 
 import json
-import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 from typing import List, Optional
 
+from llmw import WIKI_SPEC_VERSION, __version__
 from llmw.errors import (
-    InvalidConfigKey,
-    KeyNotUnsettable,
-    MissingRequiredFlag,
-    ModelDefaultAmbiguous,
-    ModelDefaultNotSet,
-    ModelNotInRegistry,
-    PurgeRequiresConfirmation,
-    SchemaVersionUnsupported,
-    SetupFailed,
-    SkillMissing,
-    SkillScriptMissing,
-    WikiDirMissing,
-    WikiExists,
-    WikiNotFound,
+    BackupFailed, InvalidConfigKey, KeyNotUnsettable, MissingRequiredFlag,
+    ModelDefaultAmbiguous, ModelDefaultNotSet, ModelNotInRegistry,
+    PurgeRequiresConfirmation, SchemaVersionUnsupported,
+    WikiDirMissing, WikiExists, WikiNotFound,
 )
 from llmw._compat import TOMLDecodeError
 from llmw.models.resolve import resolve_for_wiki
 from llmw.models.store import RegistryMissing, load
-from llmw.config import skill_setup_script
 from llmw.fsutil import now_iso8601, safe_rmtree
+from llmw.wiki import git_init, init_wiki
 from llmw.wiki import store as wiki_store
 from llmw.workspace import store as ws_store
 
@@ -39,22 +30,6 @@ def _wiki_abs(workspace_root: Path, name: str) -> Path:
             hint="运行 `llmw list` 查看已注册 wiki",
         )
     return workspace_root / ws.wikis[name].path
-
-
-def _ensure_skill_script() -> Path:
-    """解析 setup_wiki.py 路径; 不存在 raise"""
-    p = skill_setup_script()
-    if not p.exists():
-        raise SkillMissing(
-            f"找不到 SKILL submodule: {p}",
-            hint="运行 `git submodule update --init` 初始化 SKILL",
-        )
-    if p.is_dir() or not p.name.endswith(".py"):
-        raise SkillScriptMissing(
-            f"SKILL 路径不是文件: {p}",
-            hint="运行 `git submodule update --force` 修复 SKILL",
-        )
-    return p
 
 
 def _interactive_fill_metadata(workspace_root, wiki_dir, meta):
@@ -130,7 +105,7 @@ def add(
     description: Optional[str] = None,
     tags: Optional[List[str]] = None,
     model: Optional[str] = None,
-    no_setup: bool = False,
+    git: bool = False,
 ) -> Path:
     wiki_store.validate_name(name)
 
@@ -155,6 +130,9 @@ def add(
 
     wiki_dir = workspace_root / name
 
+    # spec §8: 文件级拒绝条件(在 mkdir 前检查,失败无需清理半成品目录)
+    init_wiki.check_not_initialized(wiki_dir)
+
     # 非 TTY 下: 必须所有 metadata flag 齐
     if not sys.stdin.isatty():
         missing = []
@@ -176,32 +154,16 @@ def add(
     if topic is None:
         topic = name
 
-    # 创建子目录
-    wiki_dir.mkdir(parents=False, exist_ok=False)
+    # 创建子目录(exist_ok=True: 允许目标目录已存在, 此时 --git 由 git_init 内部走
+    # is-inside-work-tree 检查跳过; spec §8 已在更早 check_not_initialized 阻断
+    # CLAUDE.md / wiki/index.md 已存在的覆盖场景)
+    wiki_dir.mkdir(parents=False, exist_ok=True)
 
-    # 跑 setup_wiki.py
-    # 注意: setup_wiki.py 签名是 setup_wiki.py <TOPIC> [<WIKI_ROOT>]; 缺 wiki_root 会
-    # 回退到 ~/wiki/<slug>（与本 workspace 解耦）。必须显式传 wiki_dir 让脚手架落在
-    # 我们的 workspace 子目录里。spec 草案漏了第二参数，这里补上。
-    if not no_setup:
-        script = _ensure_skill_script()
-        try:
-            result = subprocess.run(
-                [sys.executable, str(script), topic, str(wiki_dir)],
-                cwd=wiki_dir,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-        except FileNotFoundError as e:
-            safe_rmtree(wiki_dir)
-            raise SetupFailed(f"sys.executable 不可执行: {e}")
-        if result.returncode != 0:
-            safe_rmtree(wiki_dir)
-            stderr = (result.stderr or "").strip()
-            raise SetupFailed(
-                f"setup_wiki.py 失败 (exit={result.returncode}): {stderr or '(no stderr)'}",
-            )
+    # CLI 内联实现 wiki 骨架(spec 0.2.0 起取代原 setup_wiki.py subprocess)
+    init_wiki.render_and_write(
+        wiki_dir, topic, date.today().isoformat(),
+        cli_version=__version__, spec_version=WIKI_SPEC_VERSION,
+    )
 
     # 写 wiki_metadata.toml
     meta = wiki_store.create_skeleton(wiki_dir, name, topic)
@@ -234,7 +196,13 @@ def add(
     )
     ws_store.save(workspace_root, ws)
 
+    # opt-in git(spec §7); 前置不通过由 git_init 内部 warn 跳过,不阻断
+    git_applied = False
+    if git:
+        git_applied = git_init.init(wiki_dir)
+
     print(f"[llmw] wiki 已创建: {name} ({wiki_dir})", file=sys.stdout)
+<<<<<<< HEAD
     print(
         f"[llmw] 请 git add + commit 跟踪（建议 commit message: `wiki: add {name}`）",
         file=sys.stdout,
@@ -244,6 +212,99 @@ def add(
 
 def remove(
     workspace_root: Path, name: str, purge: bool = False, yes: bool = False
+=======
+    if git and git_applied:
+        print(
+            f"[llmw] 已 git init + commit (分支 main, 消息: Initial wiki scaffold)",
+            file=sys.stdout,
+        )
+    elif git and not git_applied:
+        # 前置不通过(git 缺失 / 已在仓内),已在 stderr 警告
+        pass
+    else:
+        print(
+            f"[llmw] 未启用 git: 如需跟踪,手动 `git init && git add . && git commit "
+            f"-m 'Initial wiki scaffold'`;或下次 add 时加 --git",
+            file=sys.stdout,
+        )
+    return wiki_dir
+
+
+def _purge_with_backup(
+    workspace_root: Path,
+    wiki_path: Path,
+    name: str,
+    no_backup: bool,
+) -> None:
+    """`wiki remove --purge` 的物理删除:默认备份到 .llmw-trash/,失败阻断。
+
+    spec wiki-spec.md:14 "delete 带备份" 的 CLI 落地;--no-backup 是 escape hatch
+    (CI / 脚本场景)。
+
+    Args:
+        workspace_root: workspace 根(用于 .llmw-trash/ 和 .gitignore 升级)。
+        wiki_path: 待删除的 wiki 目录绝对路径。
+        name: wiki 名(用于备份目录命名)。
+        no_backup: True → 直接 rmtree;False → 先备份。
+
+    Raises:
+        BackupFailed: 备份步骤任一失败(mkdir / rename);失败时不删 wiki。
+    """
+    # 1. 确保 .llmw-trash/ 在 workspace .gitignore(managed block 升级)
+    # 老 workspace 只有 2 行 block 时,会自动替换为新 3 行 block。
+    # .gitignore 写入失败不阻断备份(用户可手动 gitignore)。
+    try:
+        from llmw.workspace.manager import _ensure_workspace_gitignore
+        _ensure_workspace_gitignore(workspace_root)
+    except (OSError, ImportError):
+        pass
+
+    if no_backup:
+        safe_rmtree(wiki_path)
+        print(f"[llmw] --no-backup: 直接删除 {wiki_path}", file=sys.stdout)
+        return
+
+    # 2. 默认路径: 备份到 <workspace>/.llmw-trash/<name>-<ISO8601>/
+    # now_iso8601 形如 "2026-06-29T12:00:00Z";冒号不能在路径里,剥掉。
+    ts = now_iso8601().replace(":", "")
+    trash_root = workspace_root / ".llmw-trash"
+    backup_path = trash_root / f"{name}-{ts}"
+
+    try:
+        trash_root.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise BackupFailed(
+            f"无法创建备份目录 {trash_root}: {e}",
+            hint="检查 workspace 目录权限",
+        )
+
+    if backup_path.exists():
+        # 同一秒内两次 purge 才可能撞上;极少但要给清晰错误
+        raise BackupFailed(
+            f"备份目标已存在: {backup_path}",
+            hint="同一秒内连续 purge 两次? 重试",
+        )
+
+    try:
+        # POSIX rename 在同一 FS 下是原子的;wiki_path 和 backup_path 都在
+        # workspace 下,共享 FS,rename 等价于 mv 且无中间态。
+        wiki_path.rename(backup_path)
+    except OSError as e:
+        raise BackupFailed(
+            f"备份移动失败: {wiki_path} → {backup_path}: {e}",
+            hint="检查磁盘空间 + 权限; --no-backup 跳过备份直接删",
+        )
+
+    print(f"[llmw] 备份: {backup_path}", file=sys.stdout)
+
+
+def remove(
+    workspace_root: Path,
+    name: str,
+    purge: bool = False,
+    yes: bool = False,
+    no_backup: bool = False,
+>>>>>>> ccdffdeb8507da8e3d1b54baf18bfd965ba92a90
 ) -> None:
     ws = ws_store.load(workspace_root)
     if name not in ws.wikis:
@@ -275,12 +336,17 @@ def remove(
 
     if purge:
         if wiki_path.is_dir():
-            safe_rmtree(wiki_path)
+            _purge_with_backup(workspace_root, wiki_path, name, no_backup=no_backup)
 
+<<<<<<< HEAD
     print(
         f"[llmw] wiki '{name}' 已取消注册" + (" 并删除子目录" if purge else ""),
         file=sys.stdout,
     )
+=======
+    suffix = " 并删除子目录" if purge else ""
+    print(f"[llmw] wiki '{name}' 已取消注册{suffix}", file=sys.stdout)
+>>>>>>> ccdffdeb8507da8e3d1b54baf18bfd965ba92a90
 
 
 def show(workspace_root: Path, name: str, as_json: bool = False) -> None:

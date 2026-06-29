@@ -32,10 +32,15 @@ CONFIG_KEYS = {
 
 # ===== workspace 级 .gitignore helper =====
 
-# workspace 级 .gitignore managed block 内容（registry + overlay 两个 secret）
+# workspace 级 .gitignore managed block 内容（registry + overlay + trash 备份目录）
 # 单仓模型：wiki 是 workspace 直属子目录，*/.claude/settings.local.json 通配覆盖所有
 # wiki 的 overlay secret，不依赖 per-wiki .gitignore / wiki scaffold（见 §9.6）。
-GITIGNORE_LINES = ("workspace_models.toml", "*/.claude/settings.local.json")
+# .llmw-trash/ 由 wiki remove --purge 写入,默认走备份路径(spec wiki-spec.md:14 "delete 带备份")
+GITIGNORE_LINES = (
+    "workspace_models.toml",
+    "*/.claude/settings.local.json",
+    ".llmw-trash/",
+)
 
 
 def _ensure_workspace_gitignore(workspace_root: Path) -> None:

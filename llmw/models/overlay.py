@@ -1,4 +1,4 @@
-"""resolved ModelEntry → <wiki>/.claude/settings.local.json（Local 层 overlay 交付）
+"""resolved ModelEntry + habit template → <wiki>/.claude/settings.local.json（Local 层 overlay 交付）
 
 设计 §9.5。overlay 不读 registry、不做 resolve——只接收一个已解析好的 ModelEntry，
 渲染成 env 块并幂等合并写盘。enter(real) 调 apply()，enter(dry-run) 调 inspect()。
@@ -7,6 +7,10 @@
 overlay 稳赢，且 user 配置（~/.claude/settings.json）正常加载。取代早期 subprocess
 env 注入（优先级最低，会被 user env 块盖掉，曾靠 --setting-sources project,local 排除
 user 来规避，代价是丢 user 配置）。
+
+**Habit template**（`_HABIT_TEMPLATE`）——非用户可配的"习惯级" env key，统一随
+overlay 写入所有 wiki，确保跨 session 风格一致。增删改一律改本文件常量；不增 CLI
+命令、不入 registry / toml schema。详见 `MEMORY/overlay-habit-template.md`。
 """
 
 import json
@@ -18,21 +22,45 @@ from llmw.errors import OverlayFileUnparseable
 from llmw.fsutil import atomic_write
 from llmw.models.store import ModelEntry
 
+# Habit template: 习惯级 env key 的代码内常量（非用户可配）
+# 增删改一律改这里——不增 CLI 命令、不入 registry、不入 toml schema
+# 详见 MEMORY/overlay-habit-template.md
+_HABIT_TEMPLATE: dict[str, str] = {
+    # 隐私: 关闭非必要流量（无遥测）
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    # 标记: API 侧可识别 llmw 启动的 session
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "llmw",
+}
+
 # overlay 拥有（可覆盖）的 env key——其余 env key 与所有其他顶层 key 一律保留
-_OWNED = ("ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN")
+# ANTHROPIC_* 来自 model 字段，*_HABIT_TEMPLATE.keys() 来自代码内常量
+_OWNED = (
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    *_HABIT_TEMPLATE.keys(),
+)
 
 
-def render(model: ModelEntry) -> dict:
-    """ModelEntry → overlay env 块。
-
-    ANTHROPIC_MODEL 用 model.name（网关模型名，如 MiniMax-M3[1m]），不是 model_id
-    slug——网关只认 name。
-    """
+def _model_env(model: ModelEntry) -> dict:
+    """ModelEntry → model 字段 env 块。CLI-controllable, 来源 registry 真相源。"""
     return {
         "ANTHROPIC_MODEL": model.name,
         "ANTHROPIC_BASE_URL": model.base_url,
         "ANTHROPIC_AUTH_TOKEN": model.api_key,
     }
+
+
+def render(model: ModelEntry) -> dict:
+    """ModelEntry + habit template → overlay env 块。
+
+    ANTHROPIC_MODEL 用 model.name（网关模型名，如 MiniMax-M3[1m]），不是 model_id
+    slug——网关只认 name。
+
+    Habit template 永远是常量值，CLI 拥有所有权——用户手动改这些 key 会被下次 enter
+    reset 回常量值（与 ANTHROPIC_* 行为一致）。
+    """
+    return {**_model_env(model), **_HABIT_TEMPLATE}
 
 
 def _load_existing(path: Path) -> Optional[dict]:
@@ -53,7 +81,7 @@ def _load_existing(path: Path) -> Optional[dict]:
 
 
 def _is_up_to_date(data: Optional[dict], expected: dict) -> bool:
-    """3 个 owned key 是否已全部 == expected（文件已是最新）。"""
+    """所有 owned key（ANTHROPIC_* + habit template）是否已全部 == expected。"""
     if not data:
         return False
     env = data.get("env") or {}
@@ -63,7 +91,7 @@ def _is_up_to_date(data: Optional[dict], expected: dict) -> bool:
 def inspect(wiki_dir: Path, model: ModelEntry) -> Tuple[Path, bool]:
     """dry-run 用：返回 (path, would_write)。不写盘。
 
-    would_write=True 当且仅当文件不存在或 3 个 owned key 不全等于 expected。
+    would_write=True 当且仅当文件不存在或任一 owned key != expected。
     损坏文件（JSON 非法）→ OverlayFileUnparseable（与 apply 一致，绝不 clobber）。
     """
     path = wiki_dir / ".claude" / "settings.local.json"
@@ -75,8 +103,8 @@ def inspect(wiki_dir: Path, model: ModelEntry) -> Tuple[Path, bool]:
 def apply(wiki_dir: Path, model: ModelEntry) -> Path:
     """real enter 用：幂等合并写 + chmod 600。返回写入 path。
 
-    - 只覆盖 3 个 owned key，保留 env 内其他 key + 所有其他顶层 key（如 statusLine）
-    - 3 个 owned key 已一致 → 不写、不动 mtime（幂等短路）
+    - 只覆盖 owned key（ANTHROPIC_* + habit template），保留 env 内其他 key + 所有其他顶层 key（如 statusLine）
+    - 所有 owned key 已一致 → 不写、不动 mtime（幂等短路）
     - JSON 非法 → OverlayFileUnparseable，绝不 clobber
     """
     path = wiki_dir / ".claude" / "settings.local.json"

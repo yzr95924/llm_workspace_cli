@@ -366,6 +366,68 @@ enter(workspace_root, name, dry_run)
 - **`--setting-sources` 删除**：claude 默认加载 user+project+local；cwd=wiki 子目录 → 读到 `<wiki>/.claude/settings.local.json`（Local，> User）→ overlay 稳赢，user 配置同时加载。
 - **CLAUDE.md 缺失 / 子目录空 / `wiki_metadata.toml` 缺失** 继续走软警告，不阻断；model 解析失败**会**阻断（与既有 `WikiDirMissing` 等一致）。
 
+### 9.5.4b Habit template 机制
+
+> **新增于 2026-06-29**：overlay 不只写 model 字段，还随 `wiki enter` 一并写入一份
+> **代码内常量**的"习惯级" env。这些 key 不通过 CLI 配、不能 per-workspace 改、
+> 不能 per-wiki 关闭——目的是跨 session / 跨 wiki 保持**风格一致**。
+
+**为什么需要**
+
+不是所有 env 都该走 registry 真相源。`workspace_models.toml` 的本职是"model 元数据 +
+凭证"——把 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`（隐私开关）这种**全 CLI 行为
+约定**塞进去，是污染 schema；放 per-workspace toml 又会让"统一风格"裂开成 N 份配置。
+最佳载体是**代码内常量**：
+
+- 增删改 = 改一行 `llmw/models/overlay.py:_HABIT_TEMPLATE`
+- 升级随 CLI 版本走（老 wiki 在下次 enter 自动同步）
+- 不进 toml schema / 不进 CLI flag / 不进 registry
+
+**结构**
+
+```python
+# llmw/models/overlay.py
+_HABIT_TEMPLATE: dict[str, str] = {
+    # 隐私: 关闭非必要流量（无遥测）
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    # 标记: API 侧可识别 llmw 启动的 session
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "llmw",
+}
+
+_OWNED = (
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    *_HABIT_TEMPLATE.keys(),   # 自动跟随
+)
+```
+
+`render(model)` = `{**_model_env(model), **_HABIT_TEMPLATE}`，把 model 字段与
+habit template 合并成 flat dict。`inspect` / `apply` / `_is_up_to_date` 全部基于
+`expected.items()` 迭代，**无需改算法**——加新 template key 自动生效。
+
+**所有权与 reset 行为**
+
+habit template key 与 `ANTHROPIC_*` 一同被 `_OWNED` 收编：CLI 是 owner，**用户手改
+template key 会被下次 enter reset 回常量值**。这与 model 字段行为一致——避免
+"模板"裂成"建议"。
+
+**显式不做**
+
+- **不**提供 per-workspace 模板配置（`workspace_template.toml` 之类）——会让"统一
+  风格"裂成多份，违背初衷
+- **不**提供 `llmw overlay set-habit` CLI 命令——同样违背"非用户可配"语义
+- **不**提供 per-wiki opt-out——所有 wiki 共享同一套 habit
+
+**扩展示例**
+
+要加新 key（如 `CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192`）：在 `_HABIT_TEMPLATE` 加一行。
+下次 `wiki enter` 自动同步到所有 wiki 的 `settings.local.json`；老 wiki 在 enter 时
+因 `_is_up_to_date=False` 自动补齐。
+
+**dry-run** 会在 model 字段后打印 `(habit template)` 标签 + 各 key 值（详见 §9.5.9），
+让用户看到 enter 时会写入哪些 template key。
+
 ### 9.5.5 文件格式
 
 `<wiki>/.claude/settings.local.json`：
@@ -386,14 +448,26 @@ enter(workspace_root, name, dry_run)
 ### 9.5.6 `overlay.apply(wiki_dir, model)` 算法
 
 ```python
-_OWNED = ("ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN")
+_HABIT_TEMPLATE: dict[str, str] = {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "llmw",
+}
 
-def render(model: ModelEntry) -> dict:
+_OWNED = (
+    "ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
+    *_HABIT_TEMPLATE.keys(),   # 自动跟随
+)
+
+def _model_env(model: ModelEntry) -> dict:
     return {
         "ANTHROPIC_MODEL":      model.name,       # 网关模型名, 非 model_id
         "ANTHROPIC_BASE_URL":   model.base_url,
         "ANTHROPIC_AUTH_TOKEN": model.api_key,
     }
+
+def render(model: ModelEntry) -> dict:
+    """ModelEntry + habit template → overlay env 块。"""
+    return {**_model_env(model), **_HABIT_TEMPLATE}
 
 def inspect(wiki_dir: Path, model: ModelEntry) -> tuple[Path, bool]:
     """dry-run 用: 返回 (path, would_write)。不写盘。损坏文件 → OverlayFileUnparseable。"""
@@ -412,12 +486,12 @@ def apply(wiki_dir: Path, model: ModelEntry) -> Path:
     # 1. 读现有文件（若存在）
     data = _load_existing(path) or {}      # 非法 JSON → OverlayFileUnparseable (绝不 clobber)
 
-    # 2. 幂等短路: 3 个 owned key 已全部 == expected → 不写
+    # 2. 幂等短路: 所有 owned key (ANTHROPIC_* + habit template) 已全部 == expected → 不写
     env = dict(data.get("env") or {})
     if all(env.get(k) == v for k, v in expected.items()):
         return path
 
-    # 3. 合并: 只覆盖 3 个 owned key, 保留 env 内其他 key + 所有其他顶层 key
+    # 3. 合并: 只覆盖 owned key, 保留 env 内其他 key + 所有其他顶层 key
     env.update(expected)
     data["env"] = env
 
@@ -433,19 +507,22 @@ def apply(wiki_dir: Path, model: ModelEntry) -> Path:
 
 合并语义（关键安全保证）：
 
-- **只拥有 3 个 `ANTHROPIC_*` key**：覆盖这 3 个，保留 `env` 内其他 key（用户自设的别的 env）。
+- **只拥有 `_OWNED` key 集**：覆盖这些（3 个 `ANTHROPIC_*` + 全部 habit template），
+  保留 `env` 内其他 key（用户自设的别的 env）。
 - **保留所有其他顶层 key**：如 `statusLine` / `enabledMcpjsonServers` / 用户手加的任意字段。
-- **幂等**：3 个 owned key 已一致 → 不写、不动 mtime（连跑两次 enter 第二次 no-op）。
+- **幂等**：所有 owned key 已一致 → 不写、不动 mtime（连跑两次 enter 第二次 no-op）。
 - **绝不 clobber 损坏文件**：JSON 解析失败 → `OverlayFileUnparseable` 阻断，hint 手动修复。
 
 ### 9.5.7 边界
 
 | 场景 | 行为 |
 | --- | --- |
-| 文件不存在 | 新建（含 `.claude/` 目录），写 env 块 |
+| 文件不存在 | 新建（含 `.claude/` 目录），写 env 块（ANTHROPIC_* + 全部 habit template） |
 | 文件存在、无 `env` 块 | 加 `env` 块，保留其他顶层 key |
-| 文件存在、`env` 有其他 key | 保留，只覆盖 3 个 owned key |
-| 3 个 owned key 已一致 | 幂等短路，不写 |
+| 文件存在、`env` 有其他 key | 保留，只覆盖 `_OWNED`（ANTHROPIC_* + habit template） |
+| 所有 owned key 已一致 | 幂等短路，不写 |
+| 老文件只含 3 个 ANTHROPIC_*（无 habit template） | 下次 enter 自动补齐全部 habit template key（视为"stale"，触发重写） |
+| 用户手动改了 habit template key | 下次 enter reset 回常量值（与 ANTHROPIC_* 行为一致；template 是"强制习惯"非"建议"） |
 | 文件存在但 JSON 非法 | `OverlayFileUnparseable`（exit 1），不覆盖 |
 | `.claude/` 是文件而非目录 / mkdir 失败 | OSError → 内部错误（exit 3） |
 | NFS chmod 失败 | 静默跳过（best-effort，同 registry） |
@@ -476,6 +553,9 @@ $ llmw wiki --name=llm-systems enter --dry-run
 [llmw]   ANTHROPIC_MODEL      = MiniMax-M3[1m]
 [llmw]   ANTHROPIC_BASE_URL   = https://api.example.com
 [llmw]   ANTHROPIC_AUTH_TOKEN = sk-...XYZW
+[llmw]   (habit template)
+[llmw]     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = 1
+[llmw]     CLAUDE_CODE_ATTRIBUTION_HEADER          = llmw
 [llmw] CLAUDE.md: ✓ found (3042 bytes)
 [llmw] cmd:
   claude --add-dir .../llm-systems --system-prompt "$(cat .../CLAUDE.md)"
@@ -483,6 +563,8 @@ $ llmw wiki --name=llm-systems enter --dry-run
 ```
 
 > `(will write)` 在文件已与 resolved model 一致时显示 `(up to date, skip)`。
+> habit template key 在 model 字段下方以 `(habit template)` 标签分组,缩进 +2
+> 视觉上与 model 字段区分;value 列在组内按最长 key 对齐。
 
 ---
 
