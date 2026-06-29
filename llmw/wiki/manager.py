@@ -202,17 +202,6 @@ def add(
         git_applied = git_init.init(wiki_dir)
 
     print(f"[llmw] wiki 已创建: {name} ({wiki_dir})", file=sys.stdout)
-<<<<<<< HEAD
-    print(
-        f"[llmw] 请 git add + commit 跟踪（建议 commit message: `wiki: add {name}`）",
-        file=sys.stdout,
-    )
-    return wiki_dir
-
-
-def remove(
-    workspace_root: Path, name: str, purge: bool = False, yes: bool = False
-=======
     if git and git_applied:
         print(
             f"[llmw] 已 git init + commit (分支 main, 消息: Initial wiki scaffold)",
@@ -304,7 +293,6 @@ def remove(
     purge: bool = False,
     yes: bool = False,
     no_backup: bool = False,
->>>>>>> ccdffdeb8507da8e3d1b54baf18bfd965ba92a90
 ) -> None:
     ws = ws_store.load(workspace_root)
     if name not in ws.wikis:
@@ -338,15 +326,8 @@ def remove(
         if wiki_path.is_dir():
             _purge_with_backup(workspace_root, wiki_path, name, no_backup=no_backup)
 
-<<<<<<< HEAD
-    print(
-        f"[llmw] wiki '{name}' 已取消注册" + (" 并删除子目录" if purge else ""),
-        file=sys.stdout,
-    )
-=======
     suffix = " 并删除子目录" if purge else ""
     print(f"[llmw] wiki '{name}' 已取消注册{suffix}", file=sys.stdout)
->>>>>>> ccdffdeb8507da8e3d1b54baf18bfd965ba92a90
 
 
 def show(workspace_root: Path, name: str, as_json: bool = False) -> None:

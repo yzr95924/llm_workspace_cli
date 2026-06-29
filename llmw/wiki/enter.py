@@ -122,12 +122,6 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
         print(f"[llmw] overlay file: {overlay_path}  {tag}", file=sys.stdout)
         print(f"[llmw]   ANTHROPIC_MODEL      = {model.name}", file=sys.stdout)
         print(f"[llmw]   ANTHROPIC_BASE_URL   = {model.base_url}", file=sys.stdout)
-<<<<<<< HEAD
-        print(
-            f"[llmw]   ANTHROPIC_AUTH_TOKEN = {redact_api_key(model.api_key)}",
-            file=sys.stdout,
-        )
-=======
         print(f"[llmw]   ANTHROPIC_AUTH_TOKEN = {redact_api_key(model.api_key)}", file=sys.stdout)
         # Habit template（非用户可配的代码内常量, 随 overlay 一同写入）
         print(f"[llmw]   (habit template)", file=sys.stdout)
@@ -135,7 +129,6 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
         width = max(len(k) for k in overlay._HABIT_TEMPLATE)
         for k, v in overlay._HABIT_TEMPLATE.items():
             print(f"[llmw]     {k:{width}s} = {v}", file=sys.stdout)
->>>>>>> ccdffdeb8507da8e3d1b54baf18bfd965ba92a90
         if claude_md.is_file():
             print(
                 f"[llmw] CLAUDE.md: ✓ found ({claude_md.stat().st_size} bytes)",
@@ -151,12 +144,8 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
             cmd_display = f"claude --add-dir {wiki_path}"
         print("[llmw] cmd:", file=sys.stdout)
         print(f"  {cmd_display}", file=sys.stdout)
-<<<<<<< HEAD
-        print("[llmw] --dry-run: 未执行", file=sys.stdout)
-=======
         print(f"[llmw] env: LLM_WIKI_ROOT={wiki_path}", file=sys.stdout)
         print(f"[llmw] --dry-run: 未执行", file=sys.stdout)
->>>>>>> ccdffdeb8507da8e3d1b54baf18bfd965ba92a90
         return 0
 
     # 真正执行：lazy 写 overlay（Local 层）→ subprocess 透传 os.environ（无 env overlay，无 --setting-sources）

@@ -246,21 +246,10 @@ def main(argv=None) -> int:
             wa = args.wiki_action
             if wa == "add":
                 wiki_add(
-<<<<<<< HEAD
-                    ws_root,
-                    args.name,
-                    topic=args.topic,
-                    display_name=args.display_name,
-                    description=args.description,
-                    tags=args.tags or None,
-                    model=args.model,
-                    no_setup=args.no_setup,
-=======
                     ws_root, args.name,
                     topic=args.topic, display_name=args.display_name,
                     description=args.description, tags=args.tags or None,
                     model=args.model, git=args.git,
->>>>>>> ccdffdeb8507da8e3d1b54baf18bfd965ba92a90
                 )
             elif wa == "remove":
                 wiki_rm(ws_root, args.name, purge=args.purge, yes=args.yes,
