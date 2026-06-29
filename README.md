@@ -180,6 +180,8 @@ export LLMW_WORKSPACE="$TMPWS"
 
 llmw init --path "$TMPWS" --no-git
 test -f "$TMPWS/.gitignore" && grep -q "workspace_models.toml" "$TMPWS/.gitignore"
+test -f "$TMPWS/.gitignore" && grep -q "\*/.claude/settings.local.json" "$TMPWS/.gitignore" \
+  && echo "✓ gitignore: settings.local.json excluded"
 
 llmw model add --model-id minimax-m3 --name "MiniMax M3" \
     --base-url "https://api.example.com" --api-key "sk-test-1234567890" --default
@@ -201,7 +203,25 @@ description = ""
 tags = []
 EOF
 # 注册到 workspace.toml (实际用 llmw wiki add，这里 dry-run 校验)
-llmw wiki --name=foo enter --dry-run | grep -q "ANTHROPIC_MODEL"
+llmw wiki --name=foo enter --dry-run | grep -q "settings.local.json" && echo "✓ dry-run: overlay file shown"
+llmw wiki --name=foo enter --dry-run | grep -q "sk-...7890" && echo "✓ dry-run: api_key redacted"
+
+# 真跑 enter 生成 overlay file（需 claude 在 PATH；这里改为手动调 overlay.apply 模拟）
+# 实际场景：llmw wiki --name=foo enter  会调 overlay.apply 写 <wiki>/.claude/settings.local.json
+# 验证幂等 + chmod 600
+test -f "$TMPWS/foo/.claude/settings.local.json" && \
+  test "$(stat -c '%a' "$TMPWS/foo/.claude/settings.local.json")" = "600" \
+  && echo "✓ overlay: file exists with 600"
+
+# 验证幂等（再跑一次 enter，内容不变、不报错）
+# llmw wiki --name=foo enter --dry-run  # 状态应为 "up to date" 而非 "would update"
+
+# 验证非法 JSON 不覆盖
+echo "not valid json {{{" > "$TMPWS/foo/.claude/settings.local.json"
+chmod 600 "$TMPWS/foo/.claude/settings.local.json"
+llmw wiki --name=foo enter 2>&1 | grep -q "OverlayFileUnparseable" && echo "✓ overlay: corrupted file not clobbered"
+test "$(cat "$TMPWS/foo/.claude/settings.local.json")" = "not valid json {{{" \
+  && echo "✓ overlay: original corrupted content preserved"
 
 rm -rf "$TMPWS"
 ```

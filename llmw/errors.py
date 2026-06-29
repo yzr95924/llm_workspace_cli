@@ -149,6 +149,11 @@ class RegistryMissing(LlmwError):
     user_message = "workspace_models.toml 不存在"
 
 
+class OverlayFileUnparseable(LlmwError):
+    exit_code = 1
+    user_message = "overlay 文件不是合法 JSON"
+
+
 # ===== 内部错误 (exit_code = 3) =====
 
 class InternalError(LlmwError):

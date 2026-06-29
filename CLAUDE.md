@@ -66,7 +66,9 @@ llmw.cli (argparse + 分派)
   │
   ├──▶ llmw.wiki.enter         ──▶ llmw.models.resolve (wiki → ModelEntry)
   │           │
-  │           └─▶ subprocess(claude --add-dir + --setting-sources project,local + --system-prompt, env overlay ANTHROPIC_*)
+  │           └─▶ llmw.models.overlay (apply / inspect) → 写 <wiki>/.claude/settings.local.json (Local 层)
+  │           │
+  │           └─▶ subprocess(claude --add-dir + --system-prompt, 透传 os.environ)
   │
   └──▶ llmw.wiki.show / llmw.workspace.list  ──▶ resolve_for_wiki  (展示 model 来源)
 ```
@@ -77,8 +79,9 @@ llmw.cli (argparse + 分派)
 2. **CLI 不实现 wiki 创建逻辑**：`add` 的目录结构必须由 `my_SKILL/.../setup_wiki.py` 创建，CLI 不复制其逻辑，以便 SKILL 升级时 CLI 自动获益。
 3. **SKILL 路径固定**：SKILL 是 git submodule（`my_SKILL/llm-wiki-management/`），setup_wiki.py 路径相对 CLI 包内位置**固定**；唯一可覆盖：环境变量 `LLMW_SKILL_SETUP_SCRIPT`。
 4. **可执行入口位于 `bin/`**：`bin/llmw`（thin shell，调用 `python -m llmw`）是唯一入口；Python 包 `llmw/` 不放任何可执行入口。安装只复制 `bin/llmw` + 注册 `PATH`，**不动**包本身。
-5. **model 真相源是 `workspace_models.toml`，不依赖环境变量**（详见 `MEMORY/model-ops-no-env-vars.md`）：wiki_metadata 用 model id 引用，subprocess 启动 claude 时由 `wiki enter` 显式叠加 `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` 三个 env（其他从 `os.environ` 透传）。**CLI 不读取 `os.environ.get("ANTHROPIC_MODEL")` 之类——env 注入是 CLI 主动行为，不是被动透传**。两个易错点：(a) `ANTHROPIC_MODEL` 用 `model.name`（网关模型名，如 `MiniMax-M3[1m]`），**不是 `model_id`**（内部 slug，如 `minimax-m3-1m`）——网关只认 name；(b) `enter` 启动 claude **必须带 `--setting-sources project,local`**，否则 Claude Code 会用它 `~/.claude/settings.json` 的 `env` 块盖掉本命令注入的 overlay（settings env 块优先级高于 subprocess env，详见 `MEMORY/claude-settings-env-precedence.md`）。
-6. **api_key 永不明文出 stdout**：list / show / enter --dry-run 一律走 `llmw.models.redact.redact_api_key`（≤8 字符 → `***`；否则 `前3...末4`）。`workspace_models.toml` 落盘后 `chmod 600`（NFS 等不支持 chmod 的 FS best-effort 跳过）。
+5. **model 真相源是 `workspace_models.toml`，不依赖环境变量**（详见 `MEMORY/model-ops-no-env-vars.md`）：wiki_metadata 用 model id 引用，`wiki enter` 把 resolved model 渲染进 `<wiki>/.claude/settings.local.json` 的 `env` 块（Local 层，优先级 > User）——这是 CLI 的主动行为（写文件），subprocess 透传 `os.environ`、不传 `--setting-sources`。**CLI 不读取 `os.environ.get("ANTHROPIC_MODEL")` 之类——overlay 交付是 CLI 主动行为，不是被动透传**。两个易错点：(a) `ANTHROPIC_MODEL` 用 `model.name`（网关模型名，如 `MiniMax-M3[1m]`），**不是 `model_id`**（内部 slug，如 `minimax-m3-1m`）——网关只认 name；(b) `enter` **不传** `--setting-sources`，依赖 Local 层（`settings.local.json`）env 块优先级 > User env 块，确保 overlay 生效（详见 `MEMORY/claude-settings-env-precedence.md`）。
+6. **overlay 交付走 Local 层文件**（详见 `doc/design/09-workspace-model-registry.md` §9.5）：`wiki enter` 把 resolved model 渲染进 `<wiki>/.claude/settings.local.json` 的 `env` 块（Local 层，优先级 > User），lazy on enter。CLI **允许**写这**一个** launch-config 文件（I-5b，不放宽 I-1——仍不碰 `raw/` / `wiki/` / `CLAUDE.md`）。enter 的 subprocess 透传 `os.environ`、**不传** `--setting-sources`（恢复 user 配置；Local 层优先级高于 user env 块，overlay 稳赢）。
+7. **api_key 永不明文出 stdout**：list / show / enter --dry-run 一律走 `llmw.models.redact.redact_api_key`（≤8 字符 → `***`；否则 `前3...末4`）。`workspace_models.toml` 落盘后 `chmod 600`（NFS 等不支持 chmod 的 FS best-effort 跳过）。
 
 ### 模块边界
 
@@ -93,7 +96,8 @@ llmw.cli (argparse + 分派)
 | `llmw.workspace.manager` | `init` / `config` / `list` 业务；`init` 写 workspace `.gitignore` | 不写 wiki 文件、不读 wiki_metadata.toml |
 | `llmw.wiki.store` | wiki_metadata.toml 读写 + schema v2 + 模板填充 | 不调 setup_wiki.py、不写 workspace.toml |
 | `llmw.wiki.manager` | `add` / `remove` / `show` / `config` 业务；`add` 校验 model_id | 不进 wiki 内部、不读 wiki/ 内容 |
-| `llmw.wiki.enter` | 启动 Claude Code session：resolve model → env overlay → `claude --add-dir --setting-sources project,local [--system-prompt]` | 不写元数据 |
+| `llmw.wiki.enter` | 启动 Claude Code session：resolve model → `overlay.apply` 写 `<wiki>/.claude/settings.local.json` → `claude --add-dir [--system-prompt]`（透传 os.environ，无 --setting-sources） | 不写元数据 |
+| `llmw.models.overlay` | `render`/`inspect`/`apply`：resolved ModelEntry → `<wiki>/.claude/settings.local.json` 的 env 块；幂等合并 + chmod 600 | — |
 | `llmw.models.store` | workspace_models.toml 读写 + schema v2 + 字段校验 + chmod 600 | 不做 CRUD 业务、不做 resolve |
 | `llmw.models.redact` | `redact_api_key` 单一脱敏出口 | — |
 | `llmw.models.resolve` | `resolve_for_wiki` 单一查找入口：wiki.model 优先，否则 registry 默认 | 不做 CRUD |
@@ -129,7 +133,7 @@ llmw.cli (argparse + 分派)
 1. `<wiki>/wiki_metadata.toml` 的 `model` 字段 → 必须在 registry 中存在，否则 `ModelNotInRegistry` 阻断 enter
 2. 否则 registry 中 `is_default=true` 的唯一条目
 
-subprocess 启动时显式叠加（其余 env 透传 `os.environ`）：
+`overlay.apply` 写 `<wiki>/.claude/settings.local.json` 的 env 块（Local 层，优先级 > User）：
 
 ```
 ANTHROPIC_MODEL      = <model.name>    # 网关模型名（如 MiniMax-M3[1m]），非 model_id slug
@@ -137,7 +141,7 @@ ANTHROPIC_BASE_URL   = <base_url>
 ANTHROPIC_AUTH_TOKEN = <api_key>
 ```
 
-并给 claude 传 `--setting-sources project,local`（不加载 user 源）——否则 `~/.claude/settings.json` 的 `env` 块会盖掉上述 overlay（见 `MEMORY/claude-settings-env-precedence.md`）。`enter --dry-run` 打印上述 3 个 env（api_key 走 redact）+ argv，不执行 claude。
+subprocess 透传 `os.environ`、**不传** `--setting-sources`（恢复 user 配置；Local 层 env 块优先级高于 user env 块，overlay 稳赢，见 `MEMORY/claude-settings-env-precedence.md`）。`enter --dry-run` 打印 overlay file（路径 + 是否需要更新）+ api_key 走 redact，不执行 claude、不写文件。
 
 ## 关键设计文档
 
@@ -158,15 +162,15 @@ ANTHROPIC_AUTH_TOKEN = <api_key>
 
 - `design-docs-organization.md` — 设计文档统一放 `doc/`，按子功能拆成多份 markdown
 - `memory-persistence-policy.md` — 项目级记忆写仓库内 `MEMORY/`，跟随代码仓演进
-- `model-ops-no-env-vars.md` — model 配置由 `workspace_models.toml` + `llmw model` 管理，**不依赖环境变量**；enter 通过显式 env overlay 注入 ANTHROPIC_*
-- `claude-settings-env-precedence.md` — Claude Code `~/.claude/settings.json` 的 env 块盖过 subprocess env；enter 用 `--setting-sources project,local` 规避，ANTHROPIC_MODEL 用 `name` 非 `model_id`
+- `model-ops-no-env-vars.md` — model 配置由 `workspace_models.toml` + `llmw model` 管理，**不依赖环境变量**；enter 通过 Local 层（`<wiki>/.claude/settings.local.json`）交付 ANTHROPIC_*
+- `claude-settings-env-precedence.md` — Claude Code `~/.claude/settings.json` 的 env 块盖过 subprocess env；enter 用 Local 层（`settings.local.json`）覆盖 user env 块，ANTHROPIC_MODEL 用 `name` 非 `model_id`
 - `test-priority-low.md` — prototype 阶段测试优先级低，先跑通设计再补测试
 
 ## 开发注意事项
 
 - **不要写 wiki 内容**：任何对 `raw/` 或 `wiki/` 的写入都是违反不变量 I-1 的。
 - **不要复制 setup_wiki.py 逻辑**：wiki 目录结构必须由 SKILL submodule 创建（不变量 I-2）。
-- **不要让 model 走环境变量被读出来**：`os.environ.get("ANTHROPIC_*")` 这类读取一律禁止；model 配置完全由 `workspace_models.toml` 掌控，enter 的 env 注入是 CLI 主动行为。
+- **不要让 model 走环境变量被读出来**：`os.environ.get("ANTHROPIC_*")` 这类读取一律禁止；model 配置完全由 `workspace_models.toml` 掌控，enter 的 overlay 交付是 CLI 主动行为（写 `<wiki>/.claude/settings.local.json`）。
 - **api_key 走 redact 出口**：所有 list / show / dry-run 打印前必须过 `redact_api_key`；不要自己写 `key[:3] + "..." + key[-4:]`。
 - **schema 校验全在 store 层**：manager / resolve 不重新校验字段；想加新字段就改对应 store 的 dataclass + validate 函数。
 - **NFS 不安全**：原子写走 POSIX `rename`，本地 ext4 / APFS 安全；**不要在 NFS 挂载的 workspace 上跑 `llmw`**。`workspace_models.toml` 在 NFS 上 `chmod 600` 会 silently 失败，权限安全是 best-effort。

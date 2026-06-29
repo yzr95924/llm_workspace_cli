@@ -6,7 +6,7 @@
 > 项目背景：本 CLI 是 `@my_SKILL/llm-wiki-management` skill 的轻量 wrapper，
 > 用于管理一个 workspace（一个 git 仓）下的多个 wiki（每个 wiki 是一个子目录，含 `raw/` + `wiki/` + `CLAUDE.md`）。
 > Phase 1 范围：workspace / wiki 元数据管理 + 基础 CRUD + 启动 Claude Code session。
-> Phase 2（暂不在本批设计内）：model registry。
+> Phase 2：model registry + model overlay 交付（见 [09-workspace-model-registry.md](09-workspace-model-registry.md)）。
 
 ## 子功能拆分
 
@@ -20,6 +20,8 @@
 | [05-templates-submodule.md](05-templates-submodule.md) | `templates/` 目录与 `my_SKILL` submodule 集成 | 外部依赖 |
 | [06-error-handling.md](06-error-handling.md) | 错误场景、退出码、原子写策略 | 可靠性 |
 | [07-testing.md](07-testing.md) | 测试策略（prototype 阶段延后） | 质量保证 |
+| [08-install-uninstall.md](08-install-uninstall.md) | `scripts/install.sh` / `uninstall.sh` 安装机制 | 安装 |
+| [09-workspace-model-registry.md](09-workspace-model-registry.md) | `llmw model` 命令族 + `workspace_models.toml` + resolve + overlay 交付 | model registry（Phase 2） |
 
 ## 范围与非范围
 

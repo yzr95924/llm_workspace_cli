@@ -35,30 +35,46 @@ CONFIG_KEYS = {
 
 # ===== workspace 级 .gitignore helper =====
 
-GITIGNORE_LINE = "workspace_models.toml"
+# workspace 级 .gitignore managed block 内容（registry + overlay 两个 secret）
+# 单仓模型：wiki 是 workspace 直属子目录，*/.claude/settings.local.json 通配覆盖所有
+# wiki 的 overlay secret，不依赖 per-wiki .gitignore / wiki scaffold（见 §9.6）。
+GITIGNORE_LINES = ("workspace_models.toml", "*/.claude/settings.local.json")
 
 
 def _ensure_workspace_gitignore(workspace_root: Path) -> None:
-    """确保 workspace 级 .gitignore 包含 workspace_models.toml。
-    - 文件不存在 → 创建（带 llmw 标记段）
-    - 文件存在 → 若已有 workspace_models.toml 行，跳过；否则追加
+    """确保 workspace 级 .gitignore 含 llmw managed block（两行 secret 忽略）。
+
+    - 文件不存在 → 创建（带 marker 段）
+    - 已是最新两行 block → 跳过
+    - 有老 block（如早期单行）→ 替换 marker 区间为最新两行
+    - 无 block → 追加
     """
+    import re
+
+    from llmw.fsutil import atomic_write
+
     gitignore = workspace_root / ".gitignore"
     marker_start = "# >>> llmw (managed by llmw) >>>"
     marker_end = "# <<< llmw <<<"
-    if gitignore.is_file():
-        text = gitignore.read_text(encoding="utf-8")
-        if GITIGNORE_LINE in text:
-            return
-        addition = f"\n{marker_start}\n{GITIGNORE_LINE}\n{marker_end}\n"
-        from llmw.fsutil import atomic_write
+    block = marker_start + "\n" + "\n".join(GITIGNORE_LINES) + "\n" + marker_end
 
-        atomic_write(gitignore, text + addition)
+    if not gitignore.is_file():
+        atomic_write(gitignore, block + "\n")
+        return
+
+    text = gitignore.read_text(encoding="utf-8")
+    pattern = re.compile(re.escape(marker_start) + r".*?" + re.escape(marker_end), re.DOTALL)
+    m = pattern.search(text)
+    if m:
+        if m.group(0) == block:
+            return  # 已是最新两行 block
+        new_text = pattern.sub(block, text)  # 老 block → 替换为两行
     else:
-        content = f"{marker_start}\n{GITIGNORE_LINE}\n{marker_end}\n"
-        from llmw.fsutil import atomic_write
-
-        atomic_write(gitignore, content)
+        # 无 block → 追加（保证前导换行 + 末尾换行）
+        sep = "" if (text.endswith("\n") or not text) else "\n"
+        tail = "" if text.endswith("\n") else "\n"
+        new_text = text + sep + block + tail
+    atomic_write(gitignore, new_text)
 
 
 # ===== init =====
