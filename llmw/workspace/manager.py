@@ -1,24 +1,29 @@
 """workspace 级业务: init / config / list"""
 
-import subprocess
+import re
 import sys
+from datetime import date
 from pathlib import Path
 from typing import List, Optional
 
+from llmw import WORKSPACE_SPEC_VERSION, __version__
+from llmw._compat import TOMLDecodeError
+from llmw.config import workspace_spec_templates_dir
 from llmw.errors import (
     ConfigKeyMissing,
-    GitUnavailable,
     InvalidConfigKey,
     KeyNotUnsettable,
     ModelDefaultAmbiguous,
     ModelDefaultNotSet,
     ModelNotInRegistry,
     RegistryMissing,
+    SetupFailed,
+    SkillMissing,
     WikiDirMissing,
     WikiNotFound,
     WorkspaceExists,
 )
-from llmw._compat import TOMLDecodeError
+from llmw.fsutil import atomic_write
 from llmw.workspace import store as ws_store
 
 # config KEY 白名单: name -> (can_set, can_unset, type)
@@ -42,26 +47,40 @@ GITIGNORE_LINES = (
     ".llmw-trash/",
 )
 
+# spec §10: workspace .gitignore 的通用忽略段（OS / 编辑器 / Obsidian / 临时）。
+# 全新 init 时与 managed block 一同落盘；已有 .gitignore 时不追加（尊重外部来源）。
+_GITIGNORE_COMMON = """\
+# OS / 编辑器
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Obsidian 配置（保留 vault 内容）
+.obsidian/workspace*
+.obsidian/cache
+
+# 临时文件
+*.tmp
+*.bak
+"""
+
 
 def _ensure_workspace_gitignore(workspace_root: Path) -> None:
-    """确保 workspace 级 .gitignore 含 llmw managed block（两行 secret 忽略）。
+    """确保 workspace 级 .gitignore 含 llmw managed block + 通用忽略段（spec §10）。
 
-    - 文件不存在 → 创建（带 marker 段）
-    - 已是最新两行 block → 跳过
-    - 有老 block（如早期单行）→ 替换 marker 区间为最新两行
-    - 无 block → 追加
+    - 文件不存在 → 创建（managed block + OS / Obsidian / 临时通用段）
+    - 文件存在 → 仅更新 managed marker 区间（secret 排除行），通用段不动
+      （已有 .gitignore 视为用户/外部来源，不覆盖其内容）
     """
-    import re
-
-    from llmw.fsutil import atomic_write
-
     gitignore = workspace_root / ".gitignore"
     marker_start = "# >>> llmw (managed by llmw) >>>"
     marker_end = "# <<< llmw <<<"
     block = marker_start + "\n" + "\n".join(GITIGNORE_LINES) + "\n" + marker_end
 
     if not gitignore.is_file():
-        atomic_write(gitignore, block + "\n")
+        atomic_write(gitignore, block + "\n\n" + _GITIGNORE_COMMON)
         return
 
     text = gitignore.read_text(encoding="utf-8")
@@ -97,8 +116,65 @@ def _is_effectively_empty(path: Path) -> bool:
     return all(entry.name in ignored for entry in path.iterdir())
 
 
-def init(path: Path, git: bool = True) -> Path:
-    """初始化 workspace 根。返回 path"""
+def _write_workspace_claude_md(workspace_root: Path, display_name: str) -> None:
+    """spec §4: 按 workspace-claude-md-template.md 拷贝生成 <workspace>/CLAUDE.md。
+
+    用户所有的 "workspace 宪法"——CLI 仅在 init 时拷模板 + 替换 4 个占位符:
+      {{WORKSPACE_DISPLAY_NAME}} / {{SETUP_DATE}} / {{WORKSPACE_SPEC_VERSION}} / {{CLI_VERSION}}
+
+    spec §12: CLAUDE.md 已存在 → 拒绝覆盖（schema 是用户宪法，绝不覆盖）。
+    """
+    claude_md = workspace_root / "CLAUDE.md"
+    if claude_md.exists():
+        raise WorkspaceExists(
+            f"{claude_md} 已存在；拒绝覆盖",
+            hint="CLAUDE.md 是 workspace schema（用户所有），若需更新请手动编辑",
+        )
+
+    refs = workspace_spec_templates_dir()
+    if not refs.is_dir():
+        raise SkillMissing(
+            f"找不到 workspace SKILL references/ 目录: {refs}",
+            hint="运行 `git submodule update --init` 初始化 SKILL",
+        )
+    try:
+        tmpl = (refs / "workspace-claude-md-template.md").read_text(encoding="utf-8")
+    except OSError as e:
+        raise SetupFailed(
+            f"读取 workspace CLAUDE.md 模板失败: {e.filename}",
+            hint="检查 my_SKILL/llm-workspace-management/references/ 是否完整",
+        )
+
+    mapping = {
+        "WORKSPACE_DISPLAY_NAME": display_name,
+        "SETUP_DATE": date.today().isoformat(),
+        "WORKSPACE_SPEC_VERSION": WORKSPACE_SPEC_VERSION,
+        "CLI_VERSION": __version__,
+    }
+    for k, v in mapping.items():
+        tmpl = tmpl.replace("{{" + k + "}}", v)
+    leftover = re.findall(r"\{\{[^}]+\}\}", tmpl)
+    if leftover:
+        raise SetupFailed(
+            f"workspace CLAUDE.md 模板占位符未替换干净: {leftover}",
+            hint="检查模板占位符与 mapping 是否匹配",
+        )
+
+    try:
+        atomic_write(claude_md, tmpl)
+    except OSError as e:
+        raise SetupFailed(
+            f"写入 workspace CLAUDE.md 失败: {e.filename or e.strerror}",
+            hint="检查磁盘空间 + 目录权限",
+        )
+
+
+def init(path: Path, display_name: str = "LLM Wiki Workspace") -> Path:
+    """初始化 workspace 根。返回 path
+
+    git 由用户在外部自行 init/clone——CLI 不碰 git；若 path 已是 git 空仓
+    （仅含 .git/.gitignore），允许在其上 init。
+    """
     path = path.resolve()
     if path.exists():
         if not _is_effectively_empty(path):
@@ -109,21 +185,13 @@ def init(path: Path, git: bool = True) -> Path:
     else:
         path.mkdir(parents=True)
 
-    if git:
-        try:
-            subprocess.run(
-                ["git", "init", str(path)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            raise GitUnavailable(f"git init 失败: {e}")
-
     ws_store.create_skeleton(path)
 
-    # 写 workspace 级 .gitignore（workspace 本身就是 git 仓）
+    # 写 workspace 级 .gitignore（spec §10：无论是否启用 git 都生成，便于后续补 git）
     _ensure_workspace_gitignore(path)
+
+    # spec §4: 拷 workspace CLAUDE.md（用户所有的 workspace 宪法）
+    _write_workspace_claude_md(path, display_name)
 
     print(f"[llmw] workspace 已初始化于 {path}", file=sys.stdout)
     print(

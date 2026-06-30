@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
 
+from llmw import WORKSPACE_SPEC_VERSION, WIKI_SPEC_VERSION
 from llmw._compat import toml_loads, toml_dump
 from llmw.errors import SchemaVersionUnsupported
 from llmw.fsutil import atomic_write, now_iso8601
@@ -94,11 +95,17 @@ def save(workspace_root: Path, ws: WorkspaceToml) -> None:
 
 
 def create_skeleton(workspace_root: Path) -> WorkspaceToml:
-    """init 时调用：生成空 workspace.toml"""
+    """init 时调用：生成空 workspace.toml
+
+    templates_version 编码双 spec 版本(spec §14)，供 skill scan 前比对：
+    形如 ``workspace_spec=0.2.0; wiki_spec=0.5.0``。
+    """
     ws = WorkspaceToml(
         schema_version=SCHEMA_VERSION_SUPPORTED,
         created_at=now_iso8601(),
-        templates_version="1",
+        templates_version=(
+            f"workspace_spec={WORKSPACE_SPEC_VERSION}; wiki_spec={WIKI_SPEC_VERSION}"
+        ),
     )
     save(workspace_root, ws)
     return ws

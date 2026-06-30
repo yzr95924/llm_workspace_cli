@@ -117,11 +117,6 @@ class ClaudeNotFound(LlmwError):
     user_message = "claude 不在 PATH"
 
 
-class GitUnavailable(LlmwError):
-    exit_code = 2
-    user_message = "git 不可用"
-
-
 class PythonUnavailable(LlmwError):
     exit_code = 2
     user_message = "sys.executable 不可执行"

@@ -59,8 +59,12 @@ def build_parser() -> argparse.ArgumentParser:
     # ===== workspace 级 =====
     p_init = sub.add_parser("init", help="初始化 workspace", parents=[common])
     p_init.add_argument("--path", metavar="PATH", default=None)
-    p_init.add_argument("--git", action="store_true", default=True)
-    p_init.add_argument("--no-git", dest="git", action="store_false")
+    p_init.add_argument(
+        "--display-name",
+        default=None,
+        dest="display_name",
+        help="workspace display name (写入 CLAUDE.md; 默认 'LLM Wiki Workspace')",
+    )
 
     p_config = sub.add_parser("config", help="workspace.toml 读写", parents=[common])
     p_config.add_argument(
@@ -158,7 +162,10 @@ def main(argv=None) -> int:
             from llmw.workspace.manager import init as ws_init
 
             target = Path(args.path) if args.path else DEFAULT_WORKSPACE
-            ws_init(Path(target), git=args.git)
+            ws_init(
+                Path(target),
+                display_name=args.display_name or "LLM Wiki Workspace",
+            )
             return 0
 
         # 下列命令需要先解析 workspace_root

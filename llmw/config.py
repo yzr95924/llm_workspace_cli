@@ -72,5 +72,17 @@ def wiki_spec_templates_dir() -> Path:
     return repo_root() / "my_SKILL" / "llm-wiki-management" / "references"
 
 
+def workspace_spec_templates_dir() -> Path:
+    """workspace SKILL 仓 references/ 目录路径(workspace CLAUDE.md 模板来源)
+
+    包含:
+      - workspace-claude-md-template.md (workspace CLAUDE.md 拷贝模板, spec §4)
+      - workspace-spec.md
+
+    不存在 → 由调用方 raise SkillMissing
+    """
+    return repo_root() / "my_SKILL" / "llm-workspace-management" / "references"
+
+
 def templates_dir() -> Path:
     return repo_root() / "templates"
