@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+，标准库（`tomllib` / `tomli` 兼容层、dataclass、`subprocess`、`os.chmod`）；无第三方依赖。
 
-**项目节奏**：按 `MEMORY/test-priority-low.md`，本阶段不写单元测试，每个 task 的"测试步骤"由 `README.md` 末的 Manual Smoke 统一覆盖；本 plan 的步骤使用「实现 → smoke 跑通 → commit」模式替换 TDD 步骤。
+**项目节奏**：按 `MEMORY/MEMORY.md (短条目区 "测试优先级低")`，本阶段不写单元测试，每个 task 的"测试步骤"由 `README.md` 末的 Manual Smoke 统一覆盖；本 plan 的步骤使用「实现 → smoke 跑通 → commit」模式替换 TDD 步骤。
 
 **Spec 来源**：`doc/design/09-workspace-model-registry.md`
 

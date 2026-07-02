@@ -19,4 +19,4 @@ metadata:
 - 交付的 `ANTHROPIC_MODEL` 用 `model.name`（网关模型名），不是 `model_id`；Local 层 env 块优先级 > User 层（详见 [[claude-settings-env-precedence]]）
 - subprocess 透传 `os.environ`、不传 `--setting-sources`，恢复 user 配置
 
-关联 [[memory-persistence-policy]] [[design-docs-organization]] [[claude-settings-env-precedence]]。
+关联 [[memory-persistence-policy]] [[claude-settings-env-precedence]]。

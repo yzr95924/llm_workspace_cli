@@ -289,7 +289,7 @@ CLI 安装脚本只关心 `bin/llmw` + Python 包，不涉及 submodule 与 temp
 
 - 把 `claude-md-template.md` + 4 fixtures 作为 package data 一起打包
 - `wiki_spec_templates_dir()` 改为支持回退到 packaged data
-- （当前缺陷：详见 `MEMORY/test-priority-low.md` 与 pyproject 已知 wheel 缺陷）
+- （当前缺陷：详见 `MEMORY/MEMORY.md (短条目区 "测试优先级低")` 与 pyproject 已知 wheel 缺陷）
 
 ---
 

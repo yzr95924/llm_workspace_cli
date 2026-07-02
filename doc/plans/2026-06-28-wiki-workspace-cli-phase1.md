@@ -12,7 +12,7 @@
 - 标准库：`argparse`、`pathlib`、`subprocess`、`datetime`、`dataclasses`、`input()` (stdlib TTY)
 - 外部依赖：git (init)、`claude` (enter)、`my_SKILL/llm-wiki-management/scripts/setup_wiki.py` (wiki add)
 
-**测试策略：** 按 `MEMORY/test-priority-low`，prototype 阶段**不**写自动化测试。每个 task 用**手动 smoke** 验证 happy path；完整的 manual smoke checklist 在 Task 17。
+**测试策略：** 按 `MEMORY/MEMORY.md` 短条目区 "测试优先级低"，prototype 阶段**不**写自动化测试。每个 task 用**手动 smoke** 验证 happy path；完整的 manual smoke checklist 在 Task 17。
 
 **关键不变量（来自 design doc 00）：**
 - I-1: CLI 不写 wiki 内容（不写 `raw/` / `wiki/`，只写 `workspace.toml` + `wiki_metadata.toml`）
@@ -2676,7 +2676,7 @@ git add README.md && git commit -m "docs: rewrite README with install + manual s
 | `06` atomic_write 一致 | Task 7 |
 | `06` add 回滚 | Task 13 Step 2: setup_wiki.py 失败时 `safe_rmtree(wiki_dir)` |
 | `07` 测试延后 | 本 plan 全文以 manual smoke 替代 TDD |
-| `MEMORY/test-priority-low` | 全文每步以"冒烟"代替 pytest |
+| `MEMORY/MEMORY.md` 短条目区 "测试优先级低" | 全文每步以"冒烟"代替 pytest |
 | `MEMORY/model-ops-no-env-vars` | Task 15 enter.py 不传 `env=` 给 subprocess.run |
 
 ### 2. Placeholder 扫描

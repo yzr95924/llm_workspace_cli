@@ -35,7 +35,7 @@
 
 ### 不复用旧 PR
 
-无前置 PR；本次在 master 上一次性合入（按项目 `MEMORY/test-priority-low.md` 取向，prototype 阶段手动 smoke 验收）。
+无前置 PR；本次在 master 上一次性合入（按项目 `MEMORY/MEMORY.md (短条目区 "测试优先级低")` 取向，prototype 阶段手动 smoke 验收）。
 
 ---
 
@@ -408,7 +408,7 @@ ruff check .           # CI lint job
 pytest -q              # CI test job (py3.7 + py3.11)
 ```
 
-无新测试（`MEMORY/test-priority-low.md`）。
+无新测试（`MEMORY/MEMORY.md (短条目区 "测试优先级低")`）。
 
 ---
 

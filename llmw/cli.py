@@ -7,6 +7,66 @@ from llmw import __version__
 from llmw.errors import LlmwError, InternalError, format_error
 
 
+# bool flag 白名单:这些 flag 不带值,只用位置写法 (argparse store_true / store_false)。
+# 不在白名单里的长选项 `--flag` 后面跟的值会被 _normalize_argv 自动改写为
+# `--flag=value` 形式（带 stderr hint），强制文档约定的 `=` 风格作为运行时唯一形态。
+# 新增 bool flag 时必须同步加入此表 + 注释对齐 add_argument 位置。
+_BOOL_FLAGS = frozenset(
+    {
+        # global (cli._common_flags)
+        "--json",
+        "--debug",
+        "--quiet",
+        "-q",
+        # llmw model add
+        "--default",
+        # llmw model remove / llmw wiki remove
+        "--yes",
+        "-y",
+        # llmw wiki add (spec §7 opt-in git init)
+        "--git",
+        # llmw wiki remove
+        "--purge",
+        "--no-backup",
+        # llmw wiki enter
+        "--dry-run",
+    }
+)
+
+
+def _normalize_argv(argv: list) -> tuple:
+    """把 `--flag VALUE` 自动改写为 `--flag=VALUE`,仅对带值 flag 生效。
+
+    改写规则:
+      - 只看长选项 (`--xxx`);短选项 (`-q` / `-y`) 保持原样。
+      - 已经带 `=` 的 (`--xxx=value`) 不动。
+      - 命中 `_BOOL_FLAGS` 的不动 (bool flag 不接值)。
+      - 下一个 argv token 以 `-` 开头的,不动 (避免吞掉后续 flag)。
+
+    返回 (新 argv, 改写次数)。
+    """
+    out: list = []
+    rewritten = 0
+    i = 0
+    n = len(argv)
+    while i < n:
+        tok = argv[i]
+        if (
+            tok.startswith("--")
+            and "=" not in tok
+            and tok not in _BOOL_FLAGS
+            and i + 1 < n
+            and not argv[i + 1].startswith("-")
+        ):
+            out.append(f"{tok}={argv[i + 1]}")
+            rewritten += 1
+            i += 2
+            continue
+        out.append(tok)
+        i += 1
+    return out, rewritten
+
+
 def _common_flags() -> argparse.ArgumentParser:
     """全局 flag 的共享 parent。
 
@@ -164,8 +224,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    raw = list(argv) if argv is not None else sys.argv[1:]
+    normalized, rewritten = _normalize_argv(raw)
+    if rewritten:
+        print(
+            "[llmw] hint: 带值 flag 已自动改写为 `--flag=VALUE` 形式,"
+            "建议在脚本里直接用 `=` 连接 (避免每次启动都重写)",
+            file=sys.stderr,
+        )
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(normalized)
 
     try:
         if args.command == "init":

@@ -19,7 +19,7 @@
 - **ANTHROPIC_MODEL = `model.name`**（网关模型名，如 `MiniMax-M3[1m]`），**不是** `model_id` slug——网关只认 name。
 - **model 真相源是 `workspace_models.toml`**：不读 `os.environ.get("ANTHROPIC_*")` 作为真相源；`enter` 的 subprocess 透传 `os.environ`（默认），overlay 经 Local 层文件交付。
 - **原子写**走 `llmw.fsutil.atomic_write`（tmp + fsync + os.replace）；secret 文件写盘后 `chmod 600`，`try/except OSError` best-effort（NFS 跳过）。
-- **不写自动化测试**：遵循 `CLAUDE.md` + `MEMORY/test-priority-low.md`（prototype 阶段测试优先级低，agent 不主动加测试代码）。**本计划每个 task 用 manual smoke（内联 `python3` 脚本 / spec §9.8 命令）验证，不写 pytest 文件**——这是项目约定对 writing-plans 默认 TDD 的覆盖。
+- **不写自动化测试**：遵循 `CLAUDE.md` + `MEMORY/MEMORY.md (短条目区 "测试优先级低")`（prototype 阶段测试优先级低，agent 不主动加测试代码）。**本计划每个 task 用 manual smoke（内联 `python3` 脚本 / spec §9.8 命令）验证，不写 pytest 文件**——这是项目约定对 writing-plans 默认 TDD 的覆盖。
 - **当前 `wiki add` 是坏的**（调已移除的 `setup_wiki.py`），属 wiki-spec.md 迁移（§9.10 推迟），**不在本计划范围**。Task 3 的 smoke 用内部 store API 手构造最小 wiki 绕过 `wiki add`。
 - **本计划范围 = spec §9.5（overlay 交付）+ §9.6（单仓 gitignore）+ §9.7（OverlayFileUnparseable）**。registry/store/manager/resolve/命令族（§9.2–9.4）已实现，**不改**。
 

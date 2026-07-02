@@ -42,18 +42,28 @@ pip install -e .
 
 ## 快速上手
 
+> 参数风格约定：**带值 flag 统一用 `--flag=VALUE`**；bool flag（无值，如 `--json` `--purge` `--yes` `--git` `--dry-run`）保持位置写法；位置参数（`config KEY VALUE`）不变。
+
 ```bash
-# 初始化 workspace（默认 ~/yzr_llm_wiki_workspace）
+# 初始化 workspace（默认 ~/yzr_llm_wiki_workspace；init 不碰 git）
 llmw init
 cd ~/yzr_llm_wiki_workspace
 
-# 新建一个 wiki（非 TTY 需全 flag）
+# 先把要用的 model 注册到 workspace（Phase 2；--default 设默认 model）
+llmw model add \
+  --model-id=minimax-m3-1m \
+  --name="MiniMax-M3[1m]" \
+  --base-url="https://api.example.com" \
+  --api-key="sk-xxxxxxxx" \
+  --default
+
+# 新建一个 wiki（非 TTY 需全 flag；--model 必须是 registry 里的 model_id）
 llmw wiki --name=llm-systems add \
-  --topic "LLM Systems" \
-  --display-name "LLM 系统研究" \
-  --description "跟踪 LLM 系统相关论文与博客" \
-  --tag research --tag llm \
-  --model claude-sonnet-4-6
+  --topic="LLM Systems" \
+  --display-name="LLM 系统研究" \
+  --description="跟踪 LLM 系统相关论文与博客" \
+  --tag=research --tag=llm \
+  --model=minimax-m3-1m
 
 # 查看
 llmw list
@@ -62,33 +72,70 @@ llmw wiki --name=llm-systems show
 # 编辑 metadata（交互模式）
 llmw wiki --name=llm-systems config
 
-# 配置 workspace 级默认 model
-llmw config set default_model claude-sonnet-4-6
-
-# 启动 Claude Code session（核心命令）
+# 启动 Claude Code session（核心命令；overlay 写 <wiki>/.claude/settings.local.json）
 llmw wiki --name=llm-systems enter
 # 先看命令再跑:
 llmw wiki --name=llm-systems enter --dry-run
 
 # 移除 wiki
-llmw wiki --name=llm-systems remove          # 仅取消注册
-llmw wiki --name=llm-systems remove --purge --yes   # 同时删子目录
+llmw wiki --name=llm-systems remove                   # 仅取消注册
+llmw wiki --name=llm-systems remove --purge --yes     # 默认先备份到 .llmw-trash/
+llmw wiki --name=llm-systems remove --purge --no-backup --yes  # 跳过备份，直接 rmtree
 ```
 
 ## 命令清单
 
+### 全局 flag
+
+`--workspace=PATH` / `--json` / `--debug` / `--quiet` / `-q`（可写子命令前，也可写子命令后）。
+
+### workspace 级
+
 | 命令 | 作用 |
 | --- | --- |
-| `llmw init [--path DIR] [--no-git]` | 初始化 workspace |
-| `llmw config [get\|set\|unset] KEY [VALUE]` | 读写 `workspace.toml`；无参数 + TTY 进交互模式 |
-| `llmw list [--tag TAG]...` | 列出 wiki（`--json` 输出 JSON） |
-| `llmw wiki --name=X add [--topic ...] [--display-name ...] [--description ...] [--tag ...] [--model ...] [--no-setup]` | 新建 wiki |
-| `llmw wiki --name=X remove [--purge] [--yes]` | 移除 wiki |
-| `llmw wiki --name=X show` | 查看 wiki 详情 |
-| `llmw wiki --name=X config [get\|set\|unset] KEY [VALUE]` | 读写 `wiki_metadata.toml`；无参数默认交互模式 |
-| `llmw wiki --name=X enter [--dry-run]` | 启动 Claude Code session（Phase 1 不传 model） |
+| `llmw init [--path=PATH] [--display-name=NAME]` | 初始化 workspace；默认 PATH `~/yzr_llm_wiki_workspace`，不碰 git（允许在已有 git 空仓上 init） |
+| `llmw config [get\|set\|unset] [KEY] [VALUE]` | 读写 `workspace.toml`；无参数 + TTY 进交互模式，非 TTY 打印字段列表退出 0 |
+| `llmw list [--tag=TAG]...` | 列出 wiki（`--tag` 可重复，AND 关系） |
 
-全局 flag：`--workspace PATH` / `--json` / `--debug` / `--quiet` / `-q`。
+`llmw config` 合法 KEY（写于 `llmw/workspace/manager.py:CONFIG_KEYS`）：
+
+| KEY | set | unset | 说明 |
+| --- | :-: | :-: | --- |
+| `default_model` | ✓ | ✓ | workspace 级兜底 model（Phase 2 后真正生效的是 registry 的 `is_default=true` 条目） |
+| `templates_version` | ✗ | ✗ | 只读，编码双 spec 版本 |
+| `created_at` | ✗ | ✗ | 只读 |
+| `schema_version` | ✗ | ✗ | 只读 |
+
+### model registry（Phase 2，源数据 `workspace_models.toml`，不入 git）
+
+| 命令 | 作用 |
+| --- | --- |
+| `llmw model add --model-id=ID --name=NAME --base-url=URL --api-key=KEY [--default]` | 新增 model；`--default` 同时标记为默认（全局唯一） |
+| `llmw model list [--json]` | 列出所有 model（api_key 自动 redact） |
+| `llmw model show --model-id=ID [--json]` | 查看单条 model |
+| `llmw model set-default --model-id=ID` | 把已有条目标记为默认 |
+| `llmw model unset-default` | 清空默认标记 |
+| `llmw model remove --model-id=ID [--yes\|-y]` | 删除 model 条目 |
+
+### wiki 级
+
+| 命令 | 作用 |
+| --- | --- |
+| `llmw wiki --name=X add [--topic=...] [--display-name=...] [--description=...] [--tag=TAG]... [--model=MODEL_ID] [--git]` | 新建 wiki；非 TTY 下 metadata flag 全必填；`--model` 必须在 registry 中；`--git` opt-in 初始化 wiki 子目录 git 仓（spec §7） |
+| `llmw wiki --name=X remove [--purge] [--no-backup] [--yes\|-y]` | 移除 wiki；`--purge` 同时删子目录（默认先备份到 `.llmw-trash/<name>-<ISO8601>/`）；`--no-backup` 跳过备份直接 rmtree |
+| `llmw wiki --name=X show [--json]` | 查看 wiki 详情（resolved model 来源 + api_key redact） |
+| `llmw wiki --name=X config [get\|set\|unset] [KEY] [VALUE]` | 读写 `wiki_metadata.toml`；无参数 + TTY 进交互模式 |
+| `llmw wiki --name=X enter [--dry-run]` | resolve_for_wiki → overlay.apply 写 `<wiki>/.claude/settings.local.json` → `claude --add-dir [--system-prompt]`（透传 `os.environ`，不传 `--setting-sources`） |
+
+`llmw wiki --name=X config` 合法 KEY（`llmw/wiki/manager.py:WIKI_CONFIG_KEYS`）：
+
+| KEY | set | unset | 说明 |
+| --- | :-: | :-: | --- |
+| `display_name` | ✓ | ✓ | 显示名 |
+| `description` | ✓ | ✓ | 描述 |
+| `tags` | ✓ | ✓ | tag 列表（`set` 走逗号分隔字符串或重复 `--tag`） |
+| `model` | ✓ | ✓ | 指向 registry 中的 `model_id`（必须存在） |
+| `name` / `topic` / `schema_version` / `created_at` / `updated_at` | ✗ | ✗ | 全部只读 |
 
 ## 退出码
 
@@ -104,18 +151,23 @@ llmw wiki --name=llm-systems remove --purge --yes   # 同时删子目录
 ```
 llm_workspace_cli/                # 仓库根
 ├── bin/                          # 唯一可执行入口：thin shell → python -m llmw
-├── llmw/                         # Python 包
-│   ├── workspace/                # workspace 级：init / config / list + workspace.toml 读写
-│   └── wiki/                     # wiki 级：add / remove / show / config / enter + wiki_metadata.toml 读写
+├── llmw/                         # Python 包（4 子包，pyproject.toml 已列）
+│   ├── cli.py                    # argparse 顶层 + 全局 flag + 分派
+│   ├── config.py                 # 路径解析 + SKILL 模板目录定位
+│   ├── workspace/                # init / config / list + workspace.toml 读写
+│   ├── wiki/                     # add / remove / show / config / enter + wiki_metadata.toml 读写 + init_wiki + enter
+│   └── models/                   # registry (workspace_models.toml) + overlay + redact + resolve
 ├── scripts/                      # install / uninstall shell 脚本及其集成测试
-├── templates/                    # wiki add 时使用的元数据模板
+├── templates/                    # 仅承载 wiki_metadata.toml.template（wiki add 时实例化）
 ├── doc/                          # 设计文档（按子功能拆分）+ 实施计划
 ├── MEMORY/                       # 项目级"为什么 + 边界"记忆（提交进仓库）
-├── my_SKILL/                     # git submodule，外部 SKILL 提供 setup_wiki.py
+├── my_SKILL/                     # git submodule：wiki / workspace 两仓 SKILL 的 references/ 是 wiki 内容字节金标准
 ├── tests/                        # 当前阶段测试优先级低，先做手动 smoke（见下方）
 ├── .github/workflows/test.yml    # CI: ruff lint + pytest（py3.7 / py3.11）
-└── pyproject.toml                # setuptools 配置
+└── pyproject.toml                # setuptools 配置（packages 含 llmw.models）
 ```
+
+> `templates/` 现在**只**承载 `wiki_metadata.toml.template`（实例化 `wiki add` 的初始 metadata）；wiki 内容骨架（`raw/`、`wiki/`、`<wiki>/CLAUDE.md`）由 `llmw/wiki/init_wiki.py` 读 `my_SKILL/llm-wiki-management/references/` 下的模板与 fixtures 渲染落盘（spec 0.2.0 起取代原 SKILL `setup_wiki.py`，spec 0.10.0/0.3.0 当前）。
 
 模块职责边界与关键不变量（CLI 不写 wiki 内容、不重写 setup_wiki 逻辑、SKILL 路径固定）见 [`doc/design/00-overview.md`](doc/design/00-overview.md)。
 
@@ -127,50 +179,56 @@ llm_workspace_cli/                # 仓库根
 # 准备临时 workspace
 TMPWS=$(mktemp -d)
 
-# init
-llmw init --path "$TMPWS" --no-git
+# init（init 不碰 git；想要 git 仓在外部自己 git init）
+llmw init --path="$TMPWS"
 test -f "$TMPWS/workspace.toml" && echo "✓ init"
+test -f "$TMPWS/.gitignore" && echo "✓ gitignore (managed block)"
 
 # config (非 TTY 自动打印字段列表后退出 0)
 LLMW_WORKSPACE="$TMPWS" llmw config
-LLMW_WORKSPACE="$TMPWS" llmw config set default_model claude-sonnet-4-6
+LLMW_WORKSPACE="$TMPWS" llmw config set default_model minimax-m3-1m
 LLMW_WORKSPACE="$TMPWS" llmw config get default_model
 LLMW_WORKSPACE="$TMPWS" llmw config unset default_model
 
 # list (空)
 LLMW_WORKSPACE="$TMPWS" llmw list
 
-# add (非 TTY 全 flag)
+# model add (Phase 2: wiki add 的 --model 必须在 registry 中)
+LLMW_WORKSPACE="$TMPWS" llmw model add \
+  --model-id=minimax-m3-1m --name="MiniMax-M3[1m]" \
+  --base-url="https://api.example.com" --api-key="sk-test-1234567890" --default
+test "$(stat -c '%a' "$TMPWS/workspace_models.toml")" = "600" && echo "✓ model add (chmod 600)"
+
+# add (非 TTY 全 flag；--model 必须是 registry 里的 model_id)
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo add \
-  --topic "Foo" --display-name "Foo" --description "x" \
-  --tag a --tag b --model claude-sonnet-4-6
+  --topic="Foo" --display-name="Foo" --description="x" \
+  --tag=a --tag=b --model=minimax-m3-1m
 test -d "$TMPWS/foo/raw" -a -d "$TMPWS/foo/wiki" -a -f "$TMPWS/foo/CLAUDE.md" -a -f "$TMPWS/foo/wiki_metadata.toml" \
   && echo "✓ add (files ok)"
 
 # list (有 wiki)
 LLMW_WORKSPACE="$TMPWS" llmw list
 LLMW_WORKSPACE="$TMPWS" llmw list --json
-LLMW_WORKSPACE="$TMPWS" llmw list --tag a
+LLMW_WORKSPACE="$TMPWS" llmw list --tag=a
 
 # show
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo show
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo show --json
 
-# config set/get
+# config set/get（位置参数 KEY VALUE，不走 flag= 风格）
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo config set tags alpha,beta
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo config get tags
 
-# enter --dry-run
+# enter --dry-run（bool flag 无值）
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo enter --dry-run
 
-# remove
+# remove（--purge / --yes / --no-backup 都是 bool flag）
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo remove --purge --yes
 test ! -d "$TMPWS/foo" && echo "✓ remove --purge"
+test -d "$TMPWS/.llmw-trash" && echo "✓ remove backup landed"
 
 rm -rf "$TMPWS"
 ```
-
-每个 echo 出现 = 该步 happy path 通过。所有 `✓` 步骤都通过 = prototype 阶段验收。
 
 ### Workspace Model Registry (Phase 2)
 
@@ -178,13 +236,14 @@ rm -rf "$TMPWS"
 TMPWS=$(mktemp -d)
 export LLMW_WORKSPACE="$TMPWS"
 
-llmw init --path "$TMPWS" --no-git
+llmw init --path="$TMPWS"
 test -f "$TMPWS/.gitignore" && grep -q "workspace_models.toml" "$TMPWS/.gitignore"
 test -f "$TMPWS/.gitignore" && grep -q "\*/.claude/settings.local.json" "$TMPWS/.gitignore" \
   && echo "✓ gitignore: settings.local.json excluded"
 
-llmw model add --model-id minimax-m3 --name "MiniMax M3" \
-    --base-url "https://api.example.com" --api-key "sk-test-1234567890" --default
+llmw model add \
+    --model-id=minimax-m3-1m --name="MiniMax-M3[1m]" \
+    --base-url="https://api.example.com" --api-key="sk-test-1234567890" --default
 test "$(stat -c '%a' "$TMPWS/workspace_models.toml")" = "600"
 
 llmw model list
@@ -201,6 +260,7 @@ updated_at = "2026-06-28T10:00:00Z"
 display_name = ""
 description = ""
 tags = []
+model = "minimax-m3-1m"
 EOF
 # 注册到 workspace.toml (实际用 llmw wiki add，这里 dry-run 校验)
 llmw wiki --name=foo enter --dry-run | grep -q "settings.local.json" && echo "✓ dry-run: overlay file shown"
@@ -228,13 +288,13 @@ rm -rf "$TMPWS"
 
 ## Phase 边界
 
-| 维度 | Phase 1（当前） | Phase 2（暂未做） |
-| --- | --- | --- |
+| 维度 | Phase 1 | Phase 2（当前） |
+| --- | :-: | :-: |
 | workspace / wiki 元数据 | ✅ | |
 | 基础 CRUD | ✅ | |
-| Claude Code session 启动 | ✅（不传 model） | |
-| model registry | ❌ | ✅（`workspace_models.toml` + `llmw model` 命令） |
-| ingest / lint / query 包装 | ❌（留给 SKILL session 内） | |
+| Claude Code session 启动 | ✅（无 model overlay） | ✅（写 `<wiki>/.claude/settings.local.json` 的 Local 层 env 块） |
+| model registry | ❌ | ✅（`workspace_models.toml` + `llmw model` 全套 + `enter` overlay） |
+| ingest / lint / query 包装 | 留给 SKILL session 内（`llmw-wiki-management`） | |
 | install / uninstall 脚本 | ✅（`./scripts/install.sh` / `./scripts/uninstall.sh`） | |
 
 详见 `doc/design/` 各章节。
