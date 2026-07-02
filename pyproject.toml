@@ -15,7 +15,7 @@ dependencies = [
 llmw = "llmw.cli:main"
 
 [tool.setuptools]
-packages = ["llmw", "llmw.workspace", "llmw.wiki"]
+packages = ["llmw", "llmw.workspace", "llmw.wiki", "llmw.models"]
 include-package-data = true
 
 [tool.setuptools.package-data]

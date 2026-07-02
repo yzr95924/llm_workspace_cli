@@ -30,6 +30,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # 不装 [dev]（含 ruff）：ruff 在 3.7 上装不干净；lint 已由 lint job 覆盖。
-      # 钉 pytest<8：pytest 8 要求 py>=3.8。
-      - run: pip install -e . "pytest>=7,<8" "pytest-cov>=4"
-      - run: pytest -q
+      # 钉 pytest<8：pytest 8 要求 py>=3.8。（不装 pytest-cov：无 --cov 用例，纯多余依赖）
+      - run: pip install -e . "pytest>=7,<8"
+      # import smoke：逐一 import 所有子模块——这才是 3.7 矩阵的真实价值。它能抓到
+      # import 期求值的注解破坏（如只在 3.9+ 可用的 dict[str,str]）；而零用例时的
+      # `pytest -q` 不 import 任何模块，抓不到这类问题。
+      - run: python -c "import importlib,pkgutil,llmw; [importlib.import_module(m.name) for m in pkgutil.walk_packages(llmw.__path__,'llmw.')]; print('import smoke OK')"
+      # 当前阶段无 pytest 用例（test-priority-low）：退出码 5 = "未收集到用例"，视作
+      # 通过；其它非零码（真实测试失败/收集错误）仍让 CI 变红。补测试后可去掉此包装。
+      - run: |
+          pytest -q; code=$?
+          [ "$code" -eq 0 ] || [ "$code" -eq 5 ]

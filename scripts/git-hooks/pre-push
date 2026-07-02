@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# pre-push 守卫：保证推送前 my_SKILL submodule 指向 .gitmodules 配置分支
+# （my_SKILL = master）的远端最新。
+#
+# 为什么是"守卫"而非"自动提交"：pre-push 运行时，本次要推送的 commit 集合已确定，
+# 此时 fetch+update submodule 造成的指针 bump 是一处未提交改动，塞不进这次 push。
+# 因此这里的策略是：若指针落后就【中止】push，提示先提交 bump 再 push——保证永不
+# 推送落后的 submodule 指针，且不偷偷改写历史。
+#
+# 启用：bash scripts/install-hooks.sh（设置 core.hooksPath 指向本目录）。
+set -euo pipefail
+
+SUBMODULE="my_SKILL"
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# 子模块未初始化（.git/gitlink 缺失）则跳过，不阻断 push
+if [ ! -e "$SUBMODULE/.git" ]; then
+  echo "[pre-push] $SUBMODULE 未初始化，跳过 submodule 更新检查" >&2
+  exit 0
+fi
+
+echo "[pre-push] 拉取并检查 $SUBMODULE 是否为远端最新..." >&2
+
+# 更新到 .gitmodules 里配置分支的远端最新（仅改 submodule 工作树，不动 superproject 索引）
+if ! git submodule update --remote --recursive -- "$SUBMODULE" >&2; then
+  echo "[pre-push] error: git submodule update --remote 失败（网络 / 权限？）" >&2
+  exit 1
+fi
+
+# superproject 记录的 gitlink 若未变，说明已是最新 → 放行
+if git diff --quiet -- "$SUBMODULE"; then
+  echo "[pre-push] $SUBMODULE 已是最新，放行 push" >&2
+  exit 0
+fi
+
+# 指针变了 → 本地落后 → 中止 push，提示提交 bump 后重试
+new_sha="$(git -C "$SUBMODULE" rev-parse HEAD)"
+cat >&2 <<EOF
+[pre-push] error: $SUBMODULE 已更新到最新 (${new_sha:0:12})，但该指针尚未提交。
+[pre-push] 本次 push 已中止，以免推送落后的 submodule 指针。
+[pre-push] 请提交后重试：
+[pre-push]     git add $SUBMODULE && git commit -m "UPDATE: bump $SUBMODULE to latest"
+[pre-push]     git push
+EOF
+exit 1
