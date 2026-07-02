@@ -143,16 +143,12 @@ updated_at = "__NOW_ISO8601__"
 | `__TOPIC__` | 主题名（来自 `--topic` flag 或 fallback 到 `--name`） |
 | `__NOW_ISO8601__` | 当前 UTC ISO8601 时间 |
 
-### `CLAUDE.md.template`
+### ~~`CLAUDE.md.template`~~（已废弃，spec 0.2.0+ 移除）
 
-Phase 1 **不消费**——`setup_wiki.py` 自带模板，由 SKILL submodule 提供。
-
-本模板**预留**给未来场景：
-
-- 用户想覆盖 SKILL 默认模板
-- Phase 2/3 多 wiki 模板定制
-
-文件存在但 Phase 1 不用，CLI 代码不引用。
+> spec 0.2.0 起，CLI 不再消费本仓 `templates/` 下的 CLAUDE.md 模板——CLI 直接读 SKILL submodule 下的
+> `references/claude-md-template.md`（wiki 仓）与 `workspace-claude-md-template.md`（workspace 仓）字节拷。
+> 详情见 [05-templates-submodule §5.2 / §5.5](05-templates-submodule.md)。
+> 本文件如仍存在是历史残留。
 
 ---
 
@@ -205,5 +201,45 @@ os.replace(tmp_path, file_path)  # POSIX atomic
 | --- | --- | --- | --- |
 | `workspace.toml` | `llmw init` / `wiki add` / `wiki remove` / `llmw config` | 所有 workspace / wiki 命令 | git 入库 |
 | `<wiki>/wiki_metadata.toml` | `wiki add` / `wiki config` | `wiki show` / `wiki config` / `wiki enter`（仅元数据展示） | git 入库 |
-| `<wiki>/CLAUDE.md` | SKILL `setup_wiki.py` | `wiki show`（仅 frontmatter）/ `wiki enter`（cat 注入） | git 入库 |
+| `<wiki>/CLAUDE.md` | CLI `wiki add`（按 `claude-md-template.md` 拷） | `wiki show`（仅 frontmatter）/ `wiki enter`（cat 注入）/ Claude Code 会话 | git 入库（用户宪法） |
+| `<workspace>/CLAUDE.md` | CLI `init`（按 `workspace-claude-md-template.md` 拷） | Claude Code 会话 | git 入库（用户宪法） |
 | `templates/wiki_metadata.toml.template` | CLI 仓库维护 | `wiki add` | git 入库（CLI 仓库） |
+
+---
+
+## 4.7 非内容页索引产物（CLI init 时刻落盘，spec 0.10.0 / 0.3.0 同步对齐）
+
+> 以下 5 类**不是** wiki 内容页（不参与 5 类内容页 frontmatter 5 必填 lint），
+> 是 CLI 在 init 时刻写一次的"索引 / 元数据"层文件，被上级 CLAUDE.md 用 `@<path>` import 会话常驻。
+> 详细字段约定与跨 skill 纪律见对应 spec §：
+> - wiki 三类 → [wiki-spec §5.1 (MEMORY.md)](../../my_SKILL/llm-wiki-management/references/wiki-spec.md#51-memorymemorymd索引) / [§9.1 (tags.md)](../../my_SKILL/llm-wiki-management/references/wiki-spec.md#91-tag-白名单来源080) / [§14 (SCRIPTS.md)](../../my_SKILL/llm-wiki-management/references/wiki-spec.md#14-scripts本-wiki-仓扩展脚本目录090)
+> - workspace 两类 → [workspace-spec §5 (INDEX.md)](../../my_SKILL/llm-workspace-management/references/workspace-spec.md#5-indexmdskill-维护) / [§9.1 (MEMORY.md)](../../my_SKILL/llm-workspace-management/references/workspace-spec.md#91-memorymemorymd索引)
+
+### 4.7.1 不可变约束（强约束）
+
+| 文件 | 维护方（init 之后） | 维护方变更约束 |
+| --- | --- | --- |
+| `<wiki>/MEMORY/MEMORY.md` | LLM agent | 同步追加索引行；spec §5.2 每条 `*.md` 必须在此列出一行 |
+| `<wiki>/wiki/tags.md` | LLM agent | 裸 bullet，直接追加新 tag 或删除误判项 |
+| `<wiki>/scripts/SCRIPTS.md` | 用户 + LLM agent | 添加 / 修改 / 删除脚本与同步索引段是原子动作 |
+| `<workspace>/MEMORY/MEMORY.md` | LLM agent（跨 wiki） | 同步追加索引行；spec §9.2 同 wiki 形态 |
+| `<workspace>/INDEX.md` | skill（`llm-workspace-management`） | CLI 不参与 |
+
+> **CLI 不覆盖**：spec §8 + §12 拒绝条件的精神——5 类产物任一已存在即拒绝（详 [10-spec-alignment §10.3 D1](10-spec-alignment-2026-07.md#d1-check_not_initialized-拒绝条件扩-5-个)）。
+
+### 4.7.2 形态约定
+
+- **无 frontmatter**：5 类均为 plain markdown；与 `wiki/index.md` / `wiki/log.md` 等内容页形态不同
+- **不会被 lint 5 必填校验**：`scripts/lint_wiki.py` 的 `find_md_files` 自然不递归 `MEMORY/` / `wiki/tags.md` / `scripts/`——三类索引文件不参与内容页 schema 校验
+- **命名**：`<wiki>/MEMORY/` 大写、`<wiki>/wiki/tags.md` 小写、`<wiki>/scripts/SCRIPTS.md` 大写混排（与目录名同 source）
+- **占位符渲染**：4 份 fixture 均为无占位符少数派（与 `index.md.txt` / `log.md.txt` / `claude-md-template.md` 不同；详 [10-spec-alignment §10.3 D3](10-spec-alignment-2026-07.md#d3-scriptsmd-落盘流程2026-07-02-复核后修订)）
+
+### 4.7.3 CLI 生成时刻
+
+| 文件 | CLI 落盘命令 | fixture 来源 |
+| --- | --- | --- |
+| `<wiki>/MEMORY/MEMORY.md` | `wiki add` | `my_SKILL/llm-wiki-management/references/fixtures/memory-index.txt` |
+| `<wiki>/wiki/tags.md` | `wiki add` | `my_SKILL/llm-wiki-management/references/fixtures/tags.md.txt` |
+| `<wiki>/scripts/SCRIPTS.md` | `wiki add` | `my_SKILL/llm-wiki-management/references/fixtures/scripts.md.txt` |
+| `<workspace>/MEMORY/MEMORY.md` | `init`（幂等：已存在跳过） | `my_SKILL/llm-workspace-management/references/fixtures/memory-index.txt` |
+| `<workspace>/INDEX.md` | **无**（CLI 不参与；skill 在 `scan` 时按需创建） | — |

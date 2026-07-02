@@ -35,7 +35,7 @@ llmw wiki --name=llm-systems enter --dry-run
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--name NAME`（必填） | — | wiki 名称（小写、字母数字与 `-` / `_`），同时作为子目录名 |
-| `--topic TOPIC` | = `--name` 值 | 主题名；占位符替换进 CLAUDE.md / index.md / log.md / MEMORY/README.md |
+| `--topic TOPIC` | = `--name` 值 | 主题名；占位符替换进 CLAUDE.md / index.md / log.md |
 | `--display-name NAME` | — | 人类可读名；交互提示时作为预填值 |
 | `--description TEXT` | — | 一句话描述；交互提示时作为预填值 |
 | `--tag TAG` | `[]` | 标签（可重复）；交互提示时作为预填列表 |
@@ -56,12 +56,12 @@ llmw wiki --name=llm-systems enter --dry-run
 
 1. **校验 workspace**（同 01 章）；不存在则 `WorkspaceNotFound`
 2. **校验 `--name` 格式与唯一性**；冲突 → `WikiExists`
-3. **spec §8 文件级拒绝**：若 `<workspace>/<name>/CLAUDE.md` 或 `<wiki>/index.md` 已存在 → `WikiAlreadyInitialized`（exit 1）
+3. **spec §8 文件级拒绝**：若 `<workspace>/<name>/CLAUDE.md` / `wiki/index.md` / `MEMORY/MEMORY.md` / `wiki/tags.md` / `scripts/SCRIPTS.md` 任一已存在 → `WikiAlreadyInitialized`（exit 1）。spec §8 表格列前两项必检，§8 总段"绝不允许覆盖"的精神扩到后 3 项（详 [10-spec-alignment §10.3 D1](10-spec-alignment-2026-07.md#d1-check_not_initialized-拒绝条件扩-5-个)）
 4. **创建子目录**：`mkdir <workspace>/<name>`
 5. **调 `llmw.wiki.init_wiki.render_and_write`**（CLI 内联实现）：
-   - 读 `my_SKILL/.../references/claude-md-template.md` + 4 个 fixtures（`index.md.txt` / `log.md.txt` / `memory-readme.txt` / `gitignore.txt`）
-   - 替换 4 占位符：`{{TOPIC_NAME}}` / `{{SETUP_DATE}}` / `{{WIKI_SPEC_VERSION}}` / `{{CLI_VERSION}}`
-   - 创建 8 个子目录（`raw/{articles,assets}` + 5 个内容页子目录 + `wiki/MEMORY`）+ atomic_write 5 份字面量产物
+   - 读 `my_SKILL/.../references/claude-md-template.md` + 6 个 fixtures（`index.md.txt` / `log.md.txt` / `memory-index.txt` / `tags.md.txt` / `scripts.md.txt` / `gitignore.txt`）。后 4 份 fixture 与 `canonical/` 字节一致（无占位符少数派；详 [10-spec-alignment §10.3 D3](10-spec-alignment-2026-07.md#d3-scriptsmd-落盘流程2026-07-02-复核后修订)）
+   - 替换 4 占位符：`{{TOPIC_NAME}}` / `{{SETUP_DATE}}` / `{{WIKI_SPEC_VERSION}}` / `{{CLI_VERSION}}`（只应用于 `claude-md-template.md` / `index.md.txt` / `log.md.txt` 3 份；其他 fixture 无占位符）
+   - 创建 9 个子目录（`raw/{articles,assets}` + 5 个内容页子目录 + `<wiki>/MEMORY/` 与 `wiki/` 平级 + `scripts/`）+ atomic_write 7 份字面量产物（CLAUDE.md / .gitignore / wiki/index.md / wiki/log.md / MEMORY/MEMORY.md / wiki/tags.md / scripts/SCRIPTS.md）
    - 失败 → `SetupFailed`（exit 2）
 6. **生成 `wiki_metadata.toml` 骨架**：
    - 写入 `name`、`topic`、`schema_version`、`created_at`/`updated_at`（UTC ISO8601）
@@ -87,7 +87,7 @@ llmw wiki --name=llm-systems enter --dry-run
 ```
 $ llmw wiki --name=llm-systems add
 ✓ 子目录已创建：/home/user/yzr_llm_wiki_workspace/llm-systems
-✓ wiki 骨架已落盘（CLAUDE.md / .gitignore / wiki/{index,log,MEMORY/README}.md + raw/ + 5 内容页子目录）
+✓ wiki 骨架已落盘（CLAUDE.md / .gitignore / wiki/{index,log}.md + MEMORY/MEMORY.md + wiki/tags.md + scripts/SCRIPTS.md + raw/ + 5 内容页子目录）
 ✓ wiki_metadata.toml 已生成
 
 请填写 wiki 元数据（直接回车保留当前值 / q 跳过全部）:
@@ -109,9 +109,9 @@ $ llmw wiki --name=llm-systems add
 ### 边界
 
 - **非 TTY 下运行 `llmw wiki --name=<name> add`**：要求所有 metadata 字段以 flag 形式传齐（`--display-name`、`--description`、`--tag`、`--model`）；缺任何一项 → 报错 `MissingRequiredFlag`
-- **spec §8 拒绝条件**：若目标 `<wiki-root>` 已含 `CLAUDE.md` 或 `wiki/index.md` → `WikiAlreadyInitialized`（exit 1），不覆盖；用户必须先备份 + 删除
+- **spec §8 拒绝条件**：若目标 `<wiki-root>` 已含 `CLAUDE.md` / `wiki/index.md` / `MEMORY/MEMORY.md` / `wiki/tags.md` / `scripts/SCRIPTS.md` 任一 → `WikiAlreadyInitialized`（exit 1），不覆盖；用户必须先备份 + 删除
 - **CLI 不做半成品回滚**：与旧版不同，`render_and_write` 失败时仅 raise `SetupFailed`；目录骨架已部分落盘（spec §6 期望落地状态）。CLI 不主动 rm wiki 目录，由用户决定是否保留部分产物
-- **目标目录非空但不含 `CLAUDE.md` / `wiki/index.md`**：`mkdir(exist_ok=True)` 允许继续；CLI 不主动拒绝半成品目录。spec §8 拒绝条件**只**针对 CLAUDE.md / wiki/index.md 两个文件(不针对目录本身)。若目录已有 `raw/articles/foo.pdf` 等用户数据,CLI 写盘 5 个固定文件(`CLAUDE.md` / `.gitignore` / `wiki/index.md` / `wiki/log.md` / `wiki/MEMORY/README.md`)时**不覆盖**已有文件 — `atomic_write` 会失败而非静默替换(用户需手动处理)
+- **目标目录非空但不含上述 5 类任一产物**：`mkdir(exist_ok=True)` 允许继续；CLI 不主动拒绝半成品目录。spec §8 拒绝条件**只**针对这 5 个文件(不针对目录本身)。若目录已有 `raw/articles/foo.pdf` 等用户数据,CLI 写盘 7 个固定文件（CLAUDE.md / .gitignore / wiki/index.md / wiki/log.md / MEMORY/MEMORY.md / wiki/tags.md / scripts/SCRIPTS.md）时**不覆盖**已有文件 — `atomic_write` 会失败而非静默替换(用户需手动处理)
 - `--name` 与子目录路径一致；用户无法指定不同的 `path`
 - 交互中 `q` / `Ctrl-D` / `Ctrl-C` 视为"跳过剩余 metadata"——已收集的写入文件，未填的留空
 - `--git` 前置不通过（git 缺失 / 已在仓内）→ warn 至 stderr 跳过，不阻断落盘（spec §7）
