@@ -17,7 +17,7 @@
 
 ### 触发
 
-`my_SKILL` submodule 拉新（提交 `c3bbfa0`），两份 spec 同时升级；CLI 实现落后：
+`my_SKILL` submodule 拉新（最新提交 `b476b35` 含 fixtures/README.md 修订，前置 `c3bbfa0` 含 wiki-spec.md 加 `tags.md.txt` 与 `memory-index.txt` 字面），两份 spec 同时升级；CLI 实现落后：
 
 - **会立即报错**：fixtures 文件名错读（`memory-readme.txt` 已不存在，应读 `memory-index.txt`）
 - **不会报错但不完整**：workspace init 不建 MEMORY 骨架；wiki init 不建 `wiki/tags.md` / `scripts/SCRIPTS.md`；MEMORY 路径仍在 `wiki/MEMORY/`，spec 0.10.0 要求与 `wiki/` 平级
@@ -49,7 +49,7 @@
 | 2 | version | `llmw/__init__.py:4-5` | workspace §14 / wiki §10 | `WIKI_SPEC_VERSION 0.5.0 → 0.10.0`；`WORKSPACE_SPEC_VERSION 0.2.0 → 0.3.0` |
 | 3 | wiki init | `llmw/wiki/init_wiki.py:122-132` | wiki §1 / §5 | MEMORY 从 `wiki/MEMORY/README.md` 迁到 `<wiki>/MEMORY/MEMORY.md`（路径移 wiki 根 + 文件名 MEMORY.md） |
 | 4 | wiki init | `llmw/wiki/init_wiki.py` 新增 | wiki §9.1 | 拷 `fixtures/tags.md.txt` → `<wiki>/wiki/tags.md`（无占位符，fixture 与 canonical 字节一致） |
-| 5 | wiki init | `llmw/wiki/init_wiki.py` 新增 | wiki §14 | 拷 `fixtures/scripts.md.txt` → `<wiki>/scripts/SCRIPTS.md`（含 `{{TOPIC_NAME}}` 占位符，substitute 后落盘） |
+| 5 | wiki init | `llmw/wiki/init_wiki.py` 新增 | wiki §14 | 拷 `fixtures/scripts.md.txt` → `<wiki>/scripts/SCRIPTS.md`（**无占位符**，直接 `read + atomic_write`，与 `gitignore.txt` / `tags.md.txt` / `memory-index.txt` 同流程） |
 | 6 | init guard | `llmw/wiki/init_wiki.py:check_not_initialized` | wiki §8 | 拒绝条件由 2 个扩到 5 个：新增 `MEMORY/MEMORY.md` / `wiki/tags.md` / `scripts/SCRIPTS.md` |
 | 7 | workspace init | `llmw/workspace/manager.py` 新增 `_write_workspace_memory_index` | workspace §9.1 | 拷 `llm-workspace-management/references/fixtures/memory-index.txt` → `<workspace>/MEMORY/MEMORY.md`；helper 在 `init()` 中 `CLAUDE.md` 写入后调用；幂等（已存在跳过） |
 
@@ -57,7 +57,7 @@
 
 | # | 文档 | 章节 | 改动摘要 |
 |---|---|---|---|
-| D1 | `doc/design/05-templates-submodule.md` | §5.1 fixture 列表 / §5.5 占位符表 / §5.6 fixture 耦合表 | fixture 列表 4→6（+ `tags.md.txt` / `scripts.md.txt`）；占位符表新增 SCRIPTS.md 用 `{{TOPIC_NAME}}`；§5.7 文件依赖图补完 |
+| D1 | `doc/design/05-templates-submodule.md` | §5.1 fixture 列表 / §5.6 fixture 耦合表 | fixture 列表 4→6（+ `tags.md.txt` / `scripts.md.txt`）；**不**新增 SCRIPTS.md 占位符行——SKILL 仓修订后 scripts.md.txt 是无占位符少数派（详 §10.3 D3）；§5.7 文件依赖图补完 |
 | D2 | `doc/design/02-wiki-crud.md` | wiki add 流程 / 产物清单 | 写入清单 + 子目录清单扩到 7 件；流程图加 `wiki/tags.md`、`scripts/SCRIPTS.md`、`<wiki>/MEMORY/MEMORY.md` 三步 |
 | D3 | `doc/design/04-data-model.md` | §4 子段（CLI 产物 schema） | 简述 `<wiki>/MEMORY/MEMORY.md` / `<wiki>/wiki/tags.md` / `<wiki>/scripts/SCRIPTS.md` 的"不可变 / 不参与 5 必填 lint"性质 |
 | D4 | `doc/design/10-spec-alignment-2026-07.md`（本文档） | 全文新增 | 本次 delta |
@@ -93,21 +93,32 @@
 
 **原因**：MEMORY 索引是 LLM agent 私有记录，可能已经写了几条 experience，再 `init` 时不应擦掉。init 重跑是"补骨架"而非"重建"。
 
-### D3. fixtures 字面量权威性冲突：scripts.md.txt vs §14.7 README
+### D3. SCRIPTS.md 落盘流程（**2026-07-02 复核后修订**）
 
-**事实**：
+**最初判断**：`fixtures/scripts.md.txt` 含 `{{TOPIC_NAME}}` placeholder、CLI 需 substitute 后落盘；spec §14.7 + fixtures/README 的"无占位符"为笔误。
 
-- 跑 `head fixtures/scripts.md.txt` → line 1 写了 `# {{TOPIC_NAME}} Scripts`（**有**占位符）
-- spec §14.7（迁移段）写："拷贝 `references/fixtures/scripts.md.txt` 到 `scripts/SCRIPTS.md`（无占位符,直接落盘）"
-- `fixtures/README.md` line 20 也写："scripts.md.txt ... 无占位符,直接 fixture 比对（与 gitignore 同款）"
+**复核后定论**：SKILL 仓另一次协调提交（`b476b35 + 35f0630`，2026-07-02 23:45-23:54）已经把 fixtures/scripts.md.txt 本身、§14.3 路径约定段（删掉 `{{TOPIC_NAME}}` 字面、补 "**无**占位符" justification）、fixtures/README.md 三处全部对齐到"**无**占位符"阵营：
 
-**决策**：CLI 走 fixture 字节事实——`{{TOPIC_NAME}}` 替换后落盘（与 `wiki/index.md.txt` / `wiki/log.md.txt` 同流程）。
+- `fixtures/scripts.md.txt` line 1 = `# Scripts`（占位符已删）
+- `canonical/scripts.md` 字节与 fixture 一致
+- spec §14.3 修正为 "无占位符——SCRIPTS.md 是 CLAUDE.md 上下文里的'内部索引',与 MEMORY/MEMORY.md / wiki/tags.md 同族"
+- fixtures/README.md 加注："scripts.md.txt 是 无占位符 少数派（不要从"fixture 都带占位符"推导）"
+- §14.7 迁移段本来就写"无占位符,直接落盘"——这次与全文一致
 
-**理由**：
+**CLI 决策（已修订）**：SCRIPTS.md 走**直接读 + atomic_write**（与 `gitignore.txt` / `tags.md.txt` / `memory-index.txt` 同流程），**不** substitute、**不**依赖 mapping 字段。
 
-1. spec §14.3 明确指出 SCRIPTS.md 模板含 `{{TOPIC_NAME}}`，§14.3 是权威
-2. fixtures 与 canonical 双双有占位符（spec 锚点渲染流程适用）
-3. fixtures/README.md 与 §14.7 的"无占位符"是笔误，应在 spec 仓库改——但这是 SKILL 仓的活，不是 CLI 的
+```python
+scripts_md = (fixtures / "scripts.md.txt").read_text(encoding="utf-8")
+atomic_write(wiki_dir / "scripts" / "SCRIPTS.md", scripts_md)
+```
+
+**理由**：fixture 字节级权威 + spec §14.3 修正后一致；CLI 越简单越不易出错——单文件无 placeholder 处理时直接拷贝就是正确路径。
+
+**口径协调记录**：
+
+- 本 PR 协调耗时 ≤ 24h（user → design agent → SKILL 仓 fix → design doc 修订）
+- 详见 SKILL 仓提交 `b476b35`（`fixtures/README.md`）+ `35f0630`（其他 SKILL fix,顺手清了一处 page-templates.md 等）
+- metadata.wiki_spec_version 不动（不影响契约字节，只清描述笔误）
 
 ### D4. workspace MEMORY fixture 取 `workspace-spec.md` 仓库
 
@@ -227,16 +238,13 @@ tags_md_tmpl = (fixtures / "tags.md.txt").read_text(encoding="utf-8")
 atomic_write(wiki_dir / "wiki" / "tags.md", tags_md_tmpl)
 ```
 
-### 步骤 5：新增 `scripts/SCRIPTS.md` 渲染（含 `{{TOPIC_NAME}}`）
+### 步骤 5：新增 `scripts/SCRIPTS.md`（无占位符，直接拷）
 
 文件：`llmw/wiki/init_wiki.py`
 
 ```python
-# read:
-scripts_md_tmpl = (fixtures / "scripts.md.txt").read_text(encoding="utf-8")
-
-# substitute（mapping 已有 TOPIC_NAME）:
-scripts_md = _substitute(scripts_md_tmpl, mapping)
+# read（fixture 无占位符,无需 substitute——见 §10.3 D3 修订）:
+scripts_md = (fixtures / "scripts.md.txt").read_text(encoding="utf-8")
 
 # 在 atomic_write 段增加:
 atomic_write(wiki_dir / "scripts" / "SCRIPTS.md", scripts_md)
@@ -244,6 +252,8 @@ atomic_write(wiki_dir / "scripts" / "SCRIPTS.md", scripts_md)
 # 在目录创建段增加:
 (wiki_dir / "scripts").mkdir(parents=True, exist_ok=True)
 ```
+
+注：mapping 中 `TOPIC_NAME` / `SETUP_DATE` 等条目**不再**需要为 SCRIPTS.md 扩字段（fixture 已是渲染后字面量）。
 
 ### 步骤 6：`check_not_initialized` 拒绝条件扩展
 
@@ -315,7 +325,7 @@ print(f"[llmw] workspace 已初始化于 {path}", ...)
 文件：`doc/design/05-templates-submodule.md`
 
 - §5.1 文件清单加 `fixtures/tags.md.txt` + `fixtures/scripts.md.txt`，目录树由 4→6
-- §5.5 占位符表加 SCRIPTS.md 一行（`<wiki>/scripts/SCRIPTS.md` 渲染 `{{TOPIC_NAME}}`）
+- §5.5 占位符表 **不**新增 SCRIPTS.md 行——SKILL 仓 2026-07-02 修订后 scripts.md.txt 是无占位符少数派（详 §10.3 D3）；如有需要可在 §5.5 末尾补一段"少例外"注脚，与 fixtures/README §注 段对齐
 - §5.6 兼容性约束补"5 份 fixture 字节级稳定（或同步 bump）" → 6 份
 - §5.7 文件依赖图补 `fixtures/tags.md.txt` / `fixtures/scripts.md.txt` / `MEMORY/` / `scripts/` 四行
 - §附录 A 自检脚本补：
@@ -373,7 +383,7 @@ test -f $TMP/smoke/scripts/SCRIPTS.md          # 新增
 diff $TMP/smoke/.gitignore               my_SKILL/llm-wiki-management/references/fixtures/gitignore.txt
 diff $TMP/smoke/MEMORY/MEMORY.md        my_SKILL/llm-wiki-management/references/canonical/memory-index.md
 diff $TMP/smoke/wiki/tags.md            my_SKILL/llm-wiki-management/references/fixtures/tags.md.txt
-diff $TMP/smoke/scripts/SCRIPTS.md      <(sed "s/{{TOPIC_NAME}}/Smoke/g; s/{{SETUP_DATE}}/$(date +%F)/g" my_SKILL/llm-wiki-management/references/fixtures/scripts.md.txt)
+diff $TMP/smoke/scripts/SCRIPTS.md      my_SKILL/llm-wiki-management/references/canonical/scripts.md   # 无占位符,fixture=canonical 与 gitignore/tags/MEMORY 同款直拷
 diff $TMP/smoke/wiki/index.md           <(sed "s/{{TOPIC_NAME}}/Smoke/g; s/{{SETUP_DATE}}/$(date +%F)/g" my_SKILL/llm-wiki-management/references/fixtures/index.md.txt)
 diff $TMP/smoke/wiki/log.md             <(sed "s/{{TOPIC_NAME}}/Smoke/g; s/{{SETUP_DATE}}/$(date +%F)/g" my_SKILL/llm-wiki-management/references/fixtures/log.md.txt)
 
