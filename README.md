@@ -196,7 +196,6 @@ llm_workspace_cli/                # 仓库根
 │   └── models/                   # registry (workspace_models.toml) + overlay + redact + resolve
 ├── scripts/                      # install / uninstall shell 脚本及其集成测试
 ├── templates/                    # 仅承载 wiki_metadata.toml.template（wiki add 时实例化）
-├── doc/                          # 设计文档（按子功能拆分）+ 实施计划
 ├── MEMORY/                       # 项目级"为什么 + 边界"记忆（提交进仓库）
 ├── my_SKILL/                     # git submodule：wiki / workspace 两仓 SKILL 的 references/ 是 wiki 内容字节金标准
 ├── tests/                        # 当前阶段测试优先级低，先做手动 smoke（见下方）
@@ -205,8 +204,6 @@ llm_workspace_cli/                # 仓库根
 ```
 
 > `templates/` 现在**只**承载 `wiki_metadata.toml.template`（实例化 `wiki add` 的初始 metadata）；wiki 内容骨架（`raw/`、`wiki/`、`<wiki>/CLAUDE.md`）由 `llmw/wiki/init_wiki.py` 读 `my_SKILL/llm-wiki-management/references/` 下的模板与 fixtures 渲染落盘（spec 0.2.0 起取代原 SKILL `setup_wiki.py`，spec 0.10.0/0.3.0 当前）。
-
-模块职责边界与关键不变量（CLI 不写 wiki 内容、不重写 setup_wiki 逻辑、SKILL 路径固定）见 [`doc/design/00-overview.md`](doc/design/00-overview.md)。
 
 ## Manual Smoke Test（prototype 阶段验收清单）
 
@@ -333,8 +330,6 @@ rm -rf "$TMPWS"
 | model registry | ❌ | ✅（`workspace_models.toml` + `llmw model` 全套 + `enter` overlay） |
 | ingest / lint / query 包装 | 留给 SKILL session 内（`llmw-wiki-management`） | |
 | install / uninstall 脚本 | ✅（`./scripts/install.sh` / `./scripts/uninstall.sh`） | |
-
-详见 `doc/design/` 各章节。
 
 ## 并发 / 文件系统
 

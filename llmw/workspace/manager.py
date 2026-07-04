@@ -116,19 +116,73 @@ def _is_effectively_empty(path: Path) -> bool:
     return all(entry.name in ignored for entry in path.iterdir())
 
 
-def _write_workspace_claude_md(workspace_root: Path, display_name: str) -> None:
-    """spec §4: 按 workspace-claude-md-template.md 拷贝生成 <workspace>/CLAUDE.md。
+def _write_workspace_agents_md(workspace_root: Path, display_name: str) -> None:
+    """spec §4 (0.4.0+): 按 workspace-agents-md-template.md 拷贝生成 <workspace>/AGENTS.md (SSOT)。
 
-    用户所有的 "workspace 宪法"——CLI 仅在 init 时拷模板 + 替换 4 个占位符:
+    用户所有的 workspace 宪法 (工具无关纪律)——CLI 仅在 init 时拷模板 + 替换 4 占位符:
       {{WORKSPACE_DISPLAY_NAME}} / {{SETUP_DATE}} / {{WORKSPACE_SPEC_VERSION}} / {{CLI_VERSION}}
 
-    spec §12: CLAUDE.md 已存在 → 拒绝覆盖（schema 是用户宪法，绝不覆盖）。
+    spec §12: AGENTS.md 已存在 → 拒绝覆盖 (schema 是用户所有)。
+    """
+    agents_md = workspace_root / "AGENTS.md"
+    if agents_md.exists():
+        raise WorkspaceExists(
+            f"{agents_md} 已存在；拒绝覆盖",
+            hint="AGENTS.md 是 workspace schema（用户所有），若需更新请手动编辑",
+        )
+
+    refs = workspace_spec_templates_dir()
+    if not refs.is_dir():
+        raise SkillMissing(
+            f"找不到 workspace SKILL references/ 目录: {refs}",
+            hint="运行 `git submodule update --init` 初始化 SKILL",
+        )
+    try:
+        tmpl = (refs / "workspace-agents-md-template.md").read_text(encoding="utf-8")
+    except OSError as e:
+        raise SetupFailed(
+            f"读取 workspace AGENTS.md 模板失败: {e.filename}",
+            hint="检查 my_SKILL/llm-workspace-management/references/ 是否完整",
+        )
+
+    mapping = {
+        "WORKSPACE_DISPLAY_NAME": display_name,
+        "SETUP_DATE": date.today().isoformat(),
+        "WORKSPACE_SPEC_VERSION": WORKSPACE_SPEC_VERSION,
+        "CLI_VERSION": __version__,
+    }
+    for k, v in mapping.items():
+        tmpl = tmpl.replace("{{" + k + "}}", v)
+    leftover = re.findall(r"\{\{[^}]+\}\}", tmpl)
+    if leftover:
+        raise SetupFailed(
+            f"workspace AGENTS.md 模板占位符未替换干净: {leftover}",
+            hint="检查模板占位符与 mapping 是否匹配",
+        )
+
+    try:
+        atomic_write(agents_md, tmpl)
+    except OSError as e:
+        raise SetupFailed(
+            f"写入 workspace AGENTS.md 失败: {e.filename or e.strerror}",
+            hint="检查磁盘空间 + 目录权限",
+        )
+
+
+def _write_workspace_claude_md(workspace_root: Path, display_name: str) -> None:
+    """spec §4 (0.4.0+): 按 workspace-claude-md-template.md 拷贝生成 <workspace>/CLAUDE.md (薄壳)。
+
+    薄壳 = @AGENTS.md 一行 + 声明 (~10 行);CLI 仅在 init 时拷模板 + 替换 1 占位符
+      {{WORKSPACE_DISPLAY_NAME}} (薄壳不持 spec 版本——版本在 AGENTS.md §六)。
+    共享 4 键 mapping, str.replace 对不存在的 key 是 no-op, 不影响薄壳渲染。
+
+    spec §12: CLAUDE.md 已存在 → 拒绝覆盖 (薄壳也是 schema, 用户所有)。
     """
     claude_md = workspace_root / "CLAUDE.md"
     if claude_md.exists():
         raise WorkspaceExists(
             f"{claude_md} 已存在；拒绝覆盖",
-            hint="CLAUDE.md 是 workspace schema（用户所有），若需更新请手动编辑",
+            hint="CLAUDE.md 是 workspace schema 薄壳（用户所有），若需更新请手动编辑",
         )
 
     refs = workspace_spec_templates_dir()
@@ -229,7 +283,8 @@ def init(path: Path, display_name: str = "LLM Wiki Workspace") -> Path:
     # 写 workspace 级 .gitignore（spec §10：无论是否启用 git 都生成，便于后续补 git）
     _ensure_workspace_gitignore(path)
 
-    # spec §4: 拷 workspace CLAUDE.md（用户所有的 workspace 宪法）
+    # spec §4 (0.4.0+): 先写 AGENTS.md (SSOT), 再写 CLAUDE.md (薄壳)
+    _write_workspace_agents_md(path, display_name)
     _write_workspace_claude_md(path, display_name)
 
     # spec §9.1: 拷 workspace MEMORY.md 索引（agent 跨 wiki 持久化记忆,LLM 拥有）

@@ -90,8 +90,8 @@ llmw.cli (argparse + 分派)
 
 ### 关键不变量（核心 3 条）
 
-完整 7 条不变量维护在原 `CLAUDE.md`（迁移备份 `.migration-backup/CLAUDE.md.original`）与
-`doc/design/00-overview.md`。此处只列核心 3 条 + 指向 MEMORY 详述：
+完整 7 条不变量维护在原 `CLAUDE.md`（迁移备份 `.migration-backup/CLAUDE.md.original`）。
+此处只列核心 3 条 + 指向 MEMORY 详述：
 
 1. **CLI 不写 wiki 内容**——只写 `workspace.toml` / `<wiki>/wiki_metadata.toml` /
    `workspace_models.toml` + workspace `.gitignore`。`<wiki>/CLAUDE.md` / `wiki/index.md` /
@@ -164,7 +164,7 @@ CLI 内联 wiki 骨架的字节一致性保证）见设计文档与备份 CLAUDE
   `updated_at`（只读，CLI 自动 bump）+ `display_name` / `description` / `tags` / `model`（可
   set/unset）。`model` 字段存的是 registry 中的 `model_id`，不是 url / key。
 
-完整 schema 与字段规则见 `doc/design/04-data-model.md` 与 `doc/design/09-workspace-model-registry.md`。
+完整 schema 与字段规则见 `MEMORY/` 内对应模块的边界条目。
 
 ### `wiki enter` 的 model 解析
 
@@ -185,20 +185,6 @@ ANTHROPIC_AUTH_TOKEN = <api_key>
 agent CLI 子进程透传 `os.environ`、依赖 Local 层 `env` 块优先级稳赢（[[agent-settings-env-precedence]]）。
 `enter --dry-run` 打印 overlay file（路径 + 是否需要更新）+ api_key 走 redact，不执行 agent CLI、
 不写文件。
-
-## 关键设计文档
-
-- `doc/design/00-overview.md` — 顶层架构、模块边界、关键不变量（**先读**）
-- `doc/design/01-workspace-management.md` — `init` / `config` / `list`
-- `doc/design/02-wiki-crud.md` — `wiki add` / `remove` / `show` / `config`
-- `doc/design/03-wiki-enter.md` — `wiki enter`（核心命令）
-- `doc/design/04-data-model.md` — workspace.toml / wiki_metadata.toml schema
-- `doc/design/05-templates-submodule.md` — SKILL `references/` 字节金标准 + `my_SKILL` 集成
-  （spec 0.2.0 起取代原 `templates/` 章节）
-- `doc/design/06-error-handling.md` — 错误场景、退出码、原子写策略
-- `doc/design/07-testing.md` — 测试策略（prototype 阶段延后）
-- `doc/design/08-install-uninstall.md` — install/uninstall 设计
-- `doc/design/09-workspace-model-registry.md` — Phase 2 model registry
 
 ## 项目规约（MEMORY/）
 

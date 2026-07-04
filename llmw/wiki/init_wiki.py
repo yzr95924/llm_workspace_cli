@@ -1,13 +1,13 @@
 """wiki 仓初始化: 读 SKILL 仓 references/ 下的模板与 fixtures,
-按 wiki-spec.md v0.10.0 §1-§6 + §9.1 + §14 把 wiki 仓"出生形态"落盘.
+按 wiki-spec.md v0.11.0 §1-§6 + §9.1 + §14 把 wiki 仓"出生形态"落盘.
 
 CLI 内联实现(spec 0.2.0 起 wiki 创建归 CLI 负责,SKILL 仓只管运行时纪律).
 fixtures 是 CLI 字节级金标准(fixtures/README.md 附录 A):
 渲染后用 cmp -s 与 fixtures / canonical 比对,不一致 = CLI 实现 bug.
 
-落盘 7 件产物(2026-07 spec 对齐后):
-  CLAUDE.md, .gitignore, wiki/index.md, wiki/log.md, MEMORY/MEMORY.md,
-  wiki/tags.md, scripts/SCRIPTS.md
+落盘 8 件产物(2026-07 spec 0.11.0 对齐后, AGENTS.md SSOT 拆出):
+  AGENTS.md, CLAUDE.md(薄壳), .gitignore, wiki/index.md, wiki/log.md,
+  MEMORY/MEMORY.md, wiki/tags.md, scripts/SCRIPTS.md
 子目录: raw/{articles,assets}, wiki/{5 类内容页}, MEMORY/, scripts/
 """
 
@@ -35,11 +35,12 @@ def check_not_initialized(wiki_dir: Path) -> None:
     """spec §8: 5 类 CLI 落盘产物任一已存在 → 拒绝覆盖
 
     spec §8 表格列 CLAUDE.md + wiki/index.md 是必检;§8 总段"绝不允许覆盖已有 wiki"
-    的精神把范围扩到 MEMORY.md / tags.md / SCRIPTS.md(详情见 doc/design/10-spec-alignment §10.3 D1)。
+    的精神把范围扩到 MEMORY.md / tags.md / SCRIPTS.md。
     必须在 mkdir 前调用,避免留下半成品目录.
     """
     files = [
-        wiki_dir / "CLAUDE.md",  # spec §2 (用户宪法)
+        wiki_dir / "AGENTS.md",  # spec §2 (用户宪法/SSOT, 0.11.0+)
+        wiki_dir / "CLAUDE.md",  # spec §2 (薄壳, Claude Code 自动加载)
         wiki_dir / "wiki" / "index.md",  # spec §3 (agent 单一入口)
         wiki_dir / "MEMORY" / "MEMORY.md",  # spec §5.1 (0.10.0+ 移 wiki 根)
         wiki_dir / "wiki" / "tags.md",  # spec §9.1 (0.8.0+)
@@ -73,14 +74,14 @@ def render_and_write(
     cli_version: str,
     spec_version: str,
 ) -> None:
-    """按 wiki-spec.md v0.10.0 落盘 wiki 仓骨架.
+    """按 wiki-spec.md v0.11.0 落盘 wiki 仓骨架.
 
     Args:
         wiki_dir: wiki 仓根目录 (含路径名);调用方应已 mkdir 此目录.
-        topic: 主题名 (人类可读, e.g. "LLM Systems"),用于 CLAUDE.md / index.md / log.md 占位符.
+        topic: 主题名 (人类可读, e.g. "LLM Systems"),用于 AGENTS.md / CLAUDE.md / index.md / log.md 占位符.
         today: YYYY-MM-DD,setup 日期.
-        cli_version: llmw.__version__,用于 CLAUDE.md 占位符.
-        spec_version: llmw.WIKI_SPEC_VERSION,用于 CLAUDE.md 占位符.
+        cli_version: llmw.__version__,用于 AGENTS.md 占位符.
+        spec_version: llmw.WIKI_SPEC_VERSION,用于 AGENTS.md 占位符.
 
     Raises:
         SkillMissing: SKILL submodule 的 references/ 目录不存在.
@@ -99,8 +100,12 @@ def render_and_write(
             hint="检查 SKILL 仓 references/fixtures/ 是否完整",
         )
 
-    # 读 7 份字面量源(wiki-spec §1/§3/§4/§5/§9.1/§14)
+    # 读 8 份字面量源(spec §2 / §3 / §4 / §5.1 / §6 / §9.1 / §14)
+    # spec §2 (0.11.0+): AGENTS.md (SSOT, 工具无关) + CLAUDE.md (薄壳, Claude Code 自动加载)
+    # 占位符子集不同 — AGENTS.md 4 占位符, CLAUDE.md 仅 {{TOPIC_NAME}};
+    # 共享 mapping, str.replace 对不存在的 key 是 no-op, 不影响
     try:
+        agents_md_tmpl = (refs / "agents-md-template.md").read_text(encoding="utf-8")
         claude_md_tmpl = (refs / "claude-md-template.md").read_text(encoding="utf-8")
         index_md_tmpl = (fixtures / "index.md.txt").read_text(encoding="utf-8")
         log_md_tmpl = (fixtures / "log.md.txt").read_text(encoding="utf-8")
@@ -122,16 +127,18 @@ def render_and_write(
     }
 
     # 渲染(占位符替换 + assert 无残留)
-    # 注:tags.md.txt / scripts.md.txt / memory-index.txt / gitignore.txt 是无占位符少数派,
-    # SKILL 仓修订后 (§10.3 D3)fixture 已经不含占位符,无需 _substitute。
+    # 4 份有占位符: AGENTS.md (4) / CLAUDE.md 薄壳 (1) / index.md (2) / log.md (2)
+    # 4 份无占位符少数派: memory-index / tags / scripts / gitignore
+    # (SKILL 仓 2026-07-02 修订后 fixture 已经不含占位符,无需 _substitute)
     try:
+        agents_md = _substitute(agents_md_tmpl, mapping)
         claude_md = _substitute(claude_md_tmpl, mapping)
         index_md = _substitute(index_md_tmpl, mapping)
         log_md = _substitute(log_md_tmpl, mapping)
     except SetupFailed:
         raise
 
-    # 落盘顺序: 先建所有子目录, 再 atomic_write 7 份字面量产物
+    # 落盘顺序: 先建所有子目录, 再 atomic_write 8 份字面量产物
     # (atomic_write 内部也 mkdir parent, 但 spec §1 要求显式建 5 个空子目录以备后续 .gitkeep)
     # MEMORY/ 0.10.0+ 起在 wiki 根,与 wiki/ 平级;scripts/ 0.9.0+ 必须始终创建
     for d in (
@@ -143,6 +150,8 @@ def render_and_write(
         d.mkdir(parents=True, exist_ok=True)
 
     try:
+        # spec §2 (0.11.0+): 先写 AGENTS.md (SSOT), 再写 CLAUDE.md (薄壳)
+        atomic_write(wiki_dir / "AGENTS.md", agents_md)
         atomic_write(wiki_dir / "CLAUDE.md", claude_md)
         atomic_write(wiki_dir / ".gitignore", gitignore_tmpl)
         atomic_write(wiki_dir / "wiki" / "index.md", index_md)

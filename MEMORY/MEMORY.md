@@ -20,10 +20,6 @@
 - [MEMORY 条目约定](memory-entry-conventions.md) — 判别两类条目 / 索引格式 / 写入纪律 / 与个人 memory 关系；建新条目必读
 - [记忆持久化策略](memory-persistence-policy.md) — 项目级记忆写仓库内 `MEMORY/`，跟随代码仓演进，不写个人 memory 目录
 
-**仓库组织与设计文档**
-
-- [设计文档组织](design-docs-organization.md) — 设计文档统一放 `doc/`，按子功能拆成多份 markdown（不是单篇长文）
-
 **CLI 参数与开发节奏**
 
 - [CLI 参数传递约定](cli-ux-interactive-and-named-flags.md) — 配置类命令优先交互式；需用户指定的参数用命名 flag（`--xxx=`），不用裸位置参数
