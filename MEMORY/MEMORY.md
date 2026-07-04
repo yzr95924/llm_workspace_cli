@@ -29,9 +29,11 @@
 - [CLI 参数传递约定](cli-ux-interactive-and-named-flags.md) — 配置类命令优先交互式；需用户指定的参数用命名 flag（`--xxx=`），不用裸位置参数
 - [bash 补全 COMP_WORDBREAKS 坑](bash-completion-wordbreaks.md) — 调试须 pty 实测真实 readline（手动设 COMP_WORDS 不经分词，会假通过）；COMP_WORDBREAKS 含 = 拆 --flag=，补全函数须规范化 cur
 
-**Claude Code 集成**
+**AI agent 集成**
 
-- [Claude Code settings env 优先级](claude-settings-env-precedence.md) — settings.json 的 `env` 块盖过 subprocess env；`enter` 用 Local 层（`settings.local.json`）覆盖 user env 块；`ANTHROPIC_MODEL` 用 `name` 非 `model_id`
+- [Agent settings env 优先级](agent-settings-env-precedence.md) — settings.json 的 `env` 块盖过
+  subprocess env；`enter` 用 Local 层（`settings.local.json`）覆盖 user env 块；
+  `ANTHROPIC_MODEL` 用 `name` 非 `model_id`
 - [model 操作不走环境变量](model-ops-no-env-vars.md) — model 配置只从 `workspace_models.toml` 读（绝不读 `os.environ` 当真相源）；`enter` 通过 Local 层（`settings.local.json`）交付 `ANTHROPIC_*`（值来自 registry）
 - [Overlay habit template](overlay-habit-template.md) — `llmw/models/overlay.py:_HABIT_TEMPLATE` 是代码内常量的"习惯级" env key（非用户可配），随 enter 一并写入 settings.local.json；加新 key = 改一行常量
 

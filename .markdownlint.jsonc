@@ -1,0 +1,10 @@
+{
+  // 本仓库遵循的行宽约束是 ≤ 120 字符（见 `claude-to-agents-ssot` skill R3 与仓库约定），
+  // 覆盖 markdownlint 默认的 80 字符限制。
+  "default": true,
+  "MD013": {
+    "line_length": 120,
+    "tables": false,
+    "code_blocks": false
+  }
+}

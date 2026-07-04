@@ -318,7 +318,7 @@ Claude Code 的 settings 优先级（高 → 低）：**Managed > CLI args(--set
 
 因此早期"用 `subprocess.run(env=full_env)` 注入 `ANTHROPIC_*`"的方案，会被用户 `~/.claude/settings.json` 的 `env` 块盖掉，只能靠 `--setting-sources project,local` 把 **User 层整个排除**来规避——代价是 wiki 会话丢掉 User 级配置（`enabledPlugins` / `theme` / `statusLine`）。
 
-**本设计的做法**：把 overlay 放进 **Local 层**（`<wiki>/.claude/settings.local.json` 的 `env` 块）。Local 优先级 **高于 User** → overlay 稳赢，**且可以正常加载 User 层** → user 配置回来。同时 overlay 从"临时 env"变成"持久文件"，可 cat/grep/审计，`enter` 也少一个 `--setting-sources` 特例（详见 `MEMORY/claude-settings-env-precedence.md`）。
+**本设计的做法**：把 overlay 放进 **Local 层**（`<wiki>/.claude/settings.local.json` 的 `env` 块）。Local 优先级 **高于 User** → overlay 稳赢，**且可以正常加载 User 层** → user 配置回来。同时 overlay 从"临时 env"变成"持久文件"，可 cat/grep/审计，`enter` 也少一个 `--setting-sources` 特例（详见 `MEMORY/agent-settings-env-precedence.md`）。
 
 ### 9.5.2 核心改变
 
@@ -754,7 +754,7 @@ rm -rf "$TMPWS"
 
 - **`CLAUDE.md`**：不变量 I-1 措辞补 **I-5b**；顶层数据流图把 enter 的 `env overlay ANTHROPIC_*` 改为 `写 <wiki>/.claude/settings.local.json`、删 `--setting-sources`；模块边界表加 `llmw.models.overlay` 行、`enter` 行改"只写 launch-config 文件，不写元数据"；"`wiki enter` 的 model 解析"段交付方式改为 settings.local.json；"`init` 写 workspace `.gitignore`"相关描述更新为 managed block 两行（加 `*/.claude/settings.local.json`）。
 - **`doc/design/03-wiki-enter.md`**：Phase 2 banner + §行为步骤 改为 settings.local.json 交付，删 `--setting-sources project,local` 与 env 注入描述。
-- **`MEMORY/claude-settings-env-precedence.md`**：从"用 `--setting-sources project,local` 排除 user"改为"用 Local 层覆盖 user、并恢复 user 配置"；优先级事实保留（解释 Local 为何赢）。
+- **`MEMORY/agent-settings-env-precedence.md`**：从"用 `--setting-sources project,local` 排除 user"改为"用 Local 层覆盖 user、并恢复 user 配置"；优先级事实保留（解释 Local 为何赢）。
 - **`MEMORY/model-ops-no-env-vars.md`**：交付载体从"subprocess env 注入"改为"写 settings.local.json"；真相源不变的表述保留。
 - **`llmw/workspace/manager.py`**：`_ensure_workspace_gitignore` 的 managed block 内容常量从单行 `workspace_models.toml` 扩展为两行（加 `*/.claude/settings.local.json`）——纯 CLI 仓改动，不涉及 SKILL submodule。
 - **`README.md`**：Manual Smoke Test 段同步（加 overlay 文件检查项）。
