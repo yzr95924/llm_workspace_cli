@@ -296,6 +296,14 @@ def init(path: Path, display_name: str = "LLM Wiki Workspace") -> Path:
     # 写 workspace 级 .gitignore（spec §10：无论是否启用 git 都生成，便于后续补 git）
     _ensure_workspace_gitignore(path)
 
+    # spec §3: workspace init 时刻创建空 workspace_models.toml 骨架
+    # （含 schema_version=2 + 空 models=[]；save 内置 chmod 600 + NFS 跳过）
+    from llmw.models.store import (
+        create_skeleton as create_models_skeleton,
+        save as save_models,
+    )
+    save_models(path, create_models_skeleton(path))
+
     # spec §4 (0.4.0+): 先写 AGENTS.md (SSOT), 再写 CLAUDE.md (薄壳)
     _write_workspace_agents_md(path, display_name)
     _write_workspace_claude_md(path, display_name)

@@ -79,7 +79,9 @@ complete -c llmw -n "not __fish_seen_subcommand_from $TOP_CMDS" -l help         
 complete -c llmw -n "not __fish_seen_subcommand_from $TOP_CMDS" -l version      -d '显示版本'
 
 # 全局 flag（任何位置）
-complete -c llmw -a "--workspace=" -f -d 'workspace 根路径'
+# --workspace 用 A 类（-l workspace + 动态 -a）+ __fish_complete_directories：
+#   fish 自动生成 --workspace= 候选 + Tab 触发目录补全，与 bash compgen -d / zsh _directories 对齐
+complete -c llmw -l workspace -f -a "(__fish_complete_directories)" -d 'workspace 根路径'
 complete -c llmw -l json      -d '输出 JSON 格式'
 complete -c llmw -l debug     -d '打印 traceback'
 complete -c llmw -l quiet -s q -d '抑制 INFO'
@@ -87,6 +89,9 @@ complete -c llmw -l quiet -s q -d '抑制 INFO'
 # init 子命令 flag（path / display-name，均 free-form → B 类）
 complete -c llmw -n "__fish_seen_subcommand_from init" -a "--path="         -f -d 'workspace 路径'
 complete -c llmw -n "__fish_seen_subcommand_from init" -a "--display-name=" -f -d 'workspace 显示名'
+
+# list 子命令 flag（--tag free-form → B 类）
+complete -c llmw -n "__fish_seen_subcommand_from list" -a "--tag=" -f -d '仅列出含此 tag (可重复, AND 关系)'
 
 # ===== config 子命令 =====
 complete -c llmw -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from get set unset" -f -a "get"    -d '取值'
@@ -107,6 +112,11 @@ complete -c llmw -n "__fish_seen_subcommand_from model; and not __fish_seen_subc
 complete -c llmw -n "__fish_seen_subcommand_from model; and not __fish_seen_subcommand_from $MODEL_ACTS" -f -a "set-default"     -d '标记默认 model'
 complete -c llmw -n "__fish_seen_subcommand_from model; and not __fish_seen_subcommand_from $MODEL_ACTS" -f -a "unset-default"   -d '清空默认标记'
 complete -c llmw -n "__fish_seen_subcommand_from model; and not __fish_seen_subcommand_from $MODEL_ACTS" -f -a "remove"          -d '删除 model 条目'
+
+# model list / unset-default（无专属 flag；显式 scope 声明，与 bash line 148-150 / zsh line 185-187 对齐；
+# 全局 --workspace=/--json/--debug/--quiet/-q 由 line 82-85 兜底）
+complete -c llmw -n "__llmw_subact model list"            -f -d '列出所有 model 条目'
+complete -c llmw -n "__llmw_subact model unset-default"   -f -d '清空默认标记'
 
 # model add（全 free-form → B 类；--default 是 bool flag）
 complete -c llmw -n "__llmw_subact model add" -a "--model-id=" -f -d 'registry slug'
@@ -143,8 +153,22 @@ complete -c llmw -n "__llmw_subact wiki remove" -l purge       -d '同时删除 
 complete -c llmw -n "__llmw_subact wiki remove" -l no-backup   -d '跳过 --purge 的备份步骤'
 complete -c llmw -n "__llmw_subact wiki remove" -l yes -s y    -d '跳过确认'
 
-# wiki show / config（--name 有动态值 → A 类，无 -r）
-complete -c llmw -n "__llmw_subact wiki show config" -l name -f -a "(__llmw_wikis)" -d '目标 wiki 名'
+# wiki show（--name 有动态值 → A 类，无 -r）
+complete -c llmw -n "__llmw_subact wiki show" -l name -f -a "(__llmw_wikis)" -d '目标 wiki 名'
+
+# wiki config（--name 有动态值 → A 类，无 -r）
+complete -c llmw -n "__llmw_subact wiki config" -l name -f -a "(__llmw_wikis)" -d '目标 wiki 名'
+
+# wiki config cfg_action（get/set/unset 三选一）
+complete -c llmw -n "__fish_seen_subcommand_from wiki; and __fish_seen_subcommand_from config; and not __fish_seen_subcommand_from get set unset" -f -a "get"   -d '取值'
+complete -c llmw -n "__fish_seen_subcommand_from wiki; and __fish_seen_subcommand_from config; and not __fish_seen_subcommand_from get set unset" -f -a "set"   -d '设值'
+complete -c llmw -n "__fish_seen_subcommand_from wiki; and __fish_seen_subcommand_from config; and not __fish_seen_subcommand_from get set unset" -f -a "unset" -d '清值'
+
+# wiki config cfg_key（display_name / description / tags / model；cfg_action 之后）
+complete -c llmw -n "__fish_seen_subcommand_from wiki; and __fish_seen_subcommand_from config; and __fish_seen_subcommand_from get set unset" -f -a "display_name" -d '显示名'
+complete -c llmw -n "__fish_seen_subcommand_from wiki; and __fish_seen_subcommand_from config; and __fish_seen_subcommand_from get set unset" -f -a "description"  -d '描述'
+complete -c llmw -n "__fish_seen_subcommand_from wiki; and __fish_seen_subcommand_from config; and __fish_seen_subcommand_from get set unset" -f -a "tags"         -d 'tags (可重复)'
+complete -c llmw -n "__fish_seen_subcommand_from wiki; and __fish_seen_subcommand_from config; and __fish_seen_subcommand_from get set unset" -f -a "model"        -d '绑定的 model_id'
 
 # wiki enter（--name 有动态值 → A 类，无 -r；--dry-run 是 bool）
 complete -c llmw -n "__llmw_subact wiki enter" -l name -f -a "(__llmw_wikis)" -d '目标 wiki 名'

@@ -24,6 +24,7 @@
 
 - [CLI 参数传递约定](cli-ux-interactive-and-named-flags.md) — 配置类命令优先交互式；需用户指定的参数用命名 flag（`--xxx=`），不用裸位置参数
 - [bash 补全 COMP_WORDBREAKS 坑](bash-completion-wordbreaks.md) — 调试须 pty 实测真实 readline（手动设 COMP_WORDS 不经分词，会假通过）；COMP_WORDBREAKS 含 = 拆 --flag=，补全函数须规范化 cur
+- [completion 多段位置参数补全](completion-positional-stages.md) — 子命令有多段位置参数（如 `wiki config {get,set,unset} <key> <value>`）时，bash / fish / zsh 三套都需按 token 位置分阶段补全；漏段 Tab 断档
 
 **AI agent 集成**
 
@@ -42,6 +43,9 @@
 - **`enter_cli` 选 agent CLI** — workspace.toml 的 `enter_cli = "qodercli"` 走 qodercli（不写 overlay、不解析 model）；默认 `claude` 与现状一致
 - **my_SKILL 是 submodule** — 不要直接修改 `my_SKILL/` 目录，本地改动会被 `git submodule update` 覆盖；要改 upstream 去 `my_SKILL` 仓
 - **enter 不传 --system-prompt** — claude/qodercli 都靠 `--add-dir` + cwd=wiki 让 agent 自读 `<wiki>/CLAUDE.md`（或 AGENTS.md）；不显式注入避免双计入 + 两 backend 行为对齐
+- **workspace .gitignore managed block 多 1 行** — 实现 `_ensure_workspace_gitignore` 实际写 3 行（`workspace_models.toml` + `*/.claude/settings.local.json` + `.llmw-trash/`），spec §10 字面仅前 2 行；多出的 `.llmw-trash/` 是 `wiki remove --purge` 备份目录排除，spec 升级时一并对照
+- **workspace init 拒绝条件比 §12 字面更严** — `init` 对非空目录一律 `WorkspaceExists`（超集覆盖 §12 "workspace.toml 已存在"）；`wiki add` 对已存在目录走文件级 `check_not_initialized` 兜底（行为等价，路径不同）。功能更安全，spec 不变可接受
+- **workspace SKILL.md MEMORY 路径陈旧** — `my_SKILL/llm-workspace-management/SKILL.md` 5 处沿用 `<wiki>/wiki/MEMORY/>` 旧路径（行 161/169/237/335/369），应改 `<wiki>/MEMORY/>`（wiki-spec v0.10.0+）；llmw 按 wiki-spec §5 落盘不受影响，但 workspace `scan` / lint `memory-not-indexed` 会扫空目录——待 SKILL 维护方修
 
 ## 维护规则
 

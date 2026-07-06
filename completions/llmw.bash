@@ -118,7 +118,7 @@ _llmw() {
             COMPREPLY=($(compgen -W "--path= --display-name= $COMMON" -- "$cur"))
             ;;
         list)
-            COMPREPLY=($(compgen -W "$COMMON" -- "$cur"))
+            COMPREPLY=($(compgen -W "--tag= $COMMON" -- "$cur"))
             ;;
         config)
             if [ -z "$sub_action" ]; then
@@ -178,7 +178,7 @@ _llmw() {
                     remove)
                         COMPREPLY=($(compgen -W "--purge --no-backup -y --yes $COMMON" -- "$cur"))
                         ;;
-                    show|config|enter)
+                    show)
                         # 检测 --name= 已传否（= 形式；空格形式被 CLI 拒，不认）
                         local name_seen=0
                         i=1
@@ -189,13 +189,54 @@ _llmw() {
                             i=$((i + 1))
                         done
                         if [ "$name_seen" -eq 1 ]; then
-                            local enter_only=""
-                            [ "$sub_action" = "enter" ] && enter_only="--dry-run"
-                            COMPREPLY=($(compgen -W "$enter_only $COMMON" -- "$cur"))
+                            COMPREPLY=($(compgen -W "$COMMON" -- "$cur"))
                         else
-                            local enter_only=""
-                            [ "$sub_action" = "enter" ] && enter_only="--dry-run"
-                            COMPREPLY=($(compgen -W "--name= $enter_only $COMMON" -- "$cur"))
+                            COMPREPLY=($(compgen -W "--name= $COMMON" -- "$cur"))
+                        fi
+                        ;;
+                    config)
+                        # wiki config 三段式：cfg_action (get/set/unset) + cfg_key + cfg_value
+                        # 收集位置参数到 wiki_pos：[0]=wiki [1]=config [2]=cfg_action [3]=cfg_key
+                        local WIKI_CFG_KEYS="display_name description tags model"
+                        local name_seen=0
+                        local -a wiki_pos=()
+                        i=1
+                        while [ "$i" -lt "$COMP_CWORD" ]; do
+                            w="${COMP_WORDS[$i]}"
+                            case "$w" in
+                                --name=*) name_seen=1 ;;
+                            esac
+                            case "$w" in
+                                --*=*|-*) ;;
+                                *) wiki_pos+=("$w") ;;
+                            esac
+                            i=$((i + 1))
+                        done
+                        if [ "$name_seen" -eq 0 ]; then
+                            COMPREPLY=($(compgen -W "--name= $COMMON" -- "$cur"))
+                        elif [ -z "${wiki_pos[2]:-}" ]; then
+                            COMPREPLY=($(compgen -W "get set unset $COMMON" -- "$cur"))
+                        elif [ -z "${wiki_pos[3]:-}" ]; then
+                            COMPREPLY=($(compgen -W "$WIKI_CFG_KEYS $COMMON" -- "$cur"))
+                        else
+                            # cfg_value 自由文本，不补
+                            COMPREPLY=($(compgen -W "$COMMON" -- "$cur"))
+                        fi
+                        ;;
+                    enter)
+                        # 检测 --name= 已传否（= 形式；空格形式被 CLI 拒，不认）
+                        local name_seen=0
+                        i=1
+                        while [ "$i" -lt "$COMP_CWORD" ]; do
+                            case "${COMP_WORDS[$i]}" in
+                                --name=*) name_seen=1 ;;
+                            esac
+                            i=$((i + 1))
+                        done
+                        if [ "$name_seen" -eq 1 ]; then
+                            COMPREPLY=($(compgen -W "--dry-run $COMMON" -- "$cur"))
+                        else
+                            COMPREPLY=($(compgen -W "--name= --dry-run $COMMON" -- "$cur"))
                         fi
                         ;;
                 esac

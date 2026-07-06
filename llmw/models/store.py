@@ -174,7 +174,14 @@ def save(workspace_root: Path, reg: Registry) -> None:
 
 
 def create_skeleton(workspace_root: Path) -> Registry:
-    """init 时不创建 registry；提供空 Registry 初始化函数供 manager.add 用。"""
+    """空 Registry 工厂:返回 in-memory Registry。
+
+    两条调用点:
+    - `workspace init` (spec §3): init 内显式调 `save` 落盘空骨架
+    - `model_add` lazy fallback: 文件不存在时,in-memory 初始化 → mutate → save
+
+    注：本函数不写盘；调用方负责 save。
+    """
     now = now_iso8601()
     return Registry(
         schema_version=SCHEMA_VERSION_SUPPORTED,

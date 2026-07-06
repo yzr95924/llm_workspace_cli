@@ -13,7 +13,7 @@ metadata:
 
 初始条目:
 - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`(关闭非必要流量 / 遥测)
-- `CLAUDE_CODE_ATTRIBUTION_HEADER=llmw`(API 侧识别 llmw 启动的 session)
+- `CLAUDE_CODE_ATTRIBUTION_HEADER=0`(关闭 attribution header,API 侧不标记 llmw)
 
 **Why:** registry 的本职是 "model 元数据 + 凭证",把"全 CLI 行为约定"(隐私开关、
 attribution 标记)塞进去会污染 schema;放 per-workspace toml 又会让"统一风格"裂开

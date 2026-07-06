@@ -28,8 +28,8 @@ from llmw.models.store import ModelEntry
 _HABIT_TEMPLATE: Dict[str, str] = {
     # 隐私: 关闭非必要流量（无遥测）
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    # 标记: API 侧可识别 llmw 启动的 session
-    "CLAUDE_CODE_ATTRIBUTION_HEADER": "llmw",
+    # 关闭 attribution header（值 0 = 不标记）
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
 }
 
 # overlay 拥有（可覆盖）的 env key——其余 env key 与所有其他顶层 key 一律保留

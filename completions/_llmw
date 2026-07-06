@@ -72,7 +72,9 @@ _llmw() {
                         "${COMMON_OPTS[@]}" && ret=0
                     ;;
                 list)
-                    _arguments "${COMMON_OPTS[@]}" && ret=0
+                    _arguments \
+                        '--tag=[仅列出含此 tag (可重复, AND 关系)]:tag:' \
+                        "${COMMON_OPTS[@]}" && ret=0
                     ;;
                 config)
                     _llmw_config && ret=0
@@ -275,7 +277,7 @@ _llmw_wiki() {
                         '(--yes -y)'{--yes,-y}'[跳过确认]' \
                         "${COMMON_OPTS[@]}" && ret=0
                     ;;
-                show|config)
+                show)
                     local name_seen=0
                     local -i i=2
                     while (( i < CURRENT )); do
@@ -290,6 +292,56 @@ _llmw_wiki() {
                         _arguments \
                             '--name=[目标 wiki 名]:name:_llmw_wikis' \
                             "${COMMON_OPTS[@]}" && ret=0
+                    fi
+                    ;;
+                config)
+                    local -a WIKI_CFG_KEYS=(
+                        'display_name:显示名'
+                        'description:描述'
+                        'tags:tags (可重复)'
+                        'model:绑定的 model_id'
+                    )
+                    local name_seen=0
+                    local -i i=2
+                    while (( i < CURRENT )); do
+                        case ${words[$i]} in
+                            --name=*) name_seen=1;;
+                        esac
+                        (( i++ ))
+                    done
+                    if (( ! name_seen )); then
+                        _arguments \
+                            '--name=[目标 wiki 名]:name:_llmw_wikis' \
+                            "${COMMON_OPTS[@]}" && ret=0
+                    else
+                        # 收集位置参数到 wiki_pos：[0]=wiki [1]=config [2]=cfg_action [3]=cfg_key
+                        local -a wiki_pos=()
+                        local -i j=1
+                        while (( j < CURRENT )); do
+                            local w=${words[$j]}
+                            case "$w" in
+                                --*=*|-*) ;;
+                                *) wiki_pos+=("$w") ;;
+                            esac
+                            (( j++ ))
+                        done
+                        local cfg_action="${wiki_pos[2]:-}"
+                        local cfg_key="${wiki_pos[3]:-}"
+                        if [[ -z "$cfg_action" ]]; then
+                            local -a CFG_ACTS=(
+                                'get:取值'
+                                'set:设值'
+                                'unset:清值'
+                            )
+                            _describe -t actions 'wiki config action' CFG_ACTS
+                            _arguments "${COMMON_OPTS[@]}" && ret=0
+                        elif [[ -z "$cfg_key" ]]; then
+                            _describe -t keys 'wiki config key' WIKI_CFG_KEYS
+                            _arguments "${COMMON_OPTS[@]}" && ret=0
+                        else
+                            # cfg_value 自由文本，不补
+                            _arguments "${COMMON_OPTS[@]}" && ret=0
+                        fi
                     fi
                     ;;
                 enter)
