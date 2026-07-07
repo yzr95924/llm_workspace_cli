@@ -130,9 +130,10 @@ complete -c llmw -n "__llmw_subact model show set-default remove" -l model-id -f
 complete -c llmw -n "__llmw_subact model remove" -l yes -s y -d '跳过确认'
 
 # ===== wiki 子命令 =====
-set -l WIKI_ACTS add remove show config enter
+set -l WIKI_ACTS add remove rename show config enter
 complete -c llmw -n "__fish_seen_subcommand_from wiki; and not __fish_seen_subcommand_from $WIKI_ACTS" -f -a "add"      -d '新建 wiki'
 complete -c llmw -n "__fish_seen_subcommand_from wiki; and not __fish_seen_subcommand_from $WIKI_ACTS" -f -a "remove"   -d '移除 wiki'
+complete -c llmw -n "__fish_seen_subcommand_from wiki; and not __fish_seen_subcommand_from $WIKI_ACTS" -f -a "rename"   -d '重命名 wiki (目录 + 索引 + metadata)'
 complete -c llmw -n "__fish_seen_subcommand_from wiki; and not __fish_seen_subcommand_from $WIKI_ACTS" -f -a "show"     -d '查看 wiki 详情'
 complete -c llmw -n "__fish_seen_subcommand_from wiki; and not __fish_seen_subcommand_from $WIKI_ACTS" -f -a "config"   -d '读写 wiki_metadata.toml'
 complete -c llmw -n "__fish_seen_subcommand_from wiki; and not __fish_seen_subcommand_from $WIKI_ACTS" -f -a "enter"    -d '启动 AI agent session'
@@ -152,6 +153,10 @@ complete -c llmw -n "__llmw_subact wiki add" -l git -d 'opt-in: 初始化 git �
 complete -c llmw -n "__llmw_subact wiki remove" -l purge       -d '同时删除 wiki 子目录'
 complete -c llmw -n "__llmw_subact wiki remove" -l no-backup   -d '跳过 --purge 的备份步骤'
 complete -c llmw -n "__llmw_subact wiki remove" -l yes -s y    -d '跳过确认'
+
+# wiki rename（--old 有动态值 → A 类，无 -r；--new free-form → B 类，无 -r）
+complete -c llmw -n "__llmw_subact wiki rename" -l old -f -a "(__llmw_wikis)" -d '当前 wiki 名'
+complete -c llmw -n "__llmw_subact wiki rename" -a "--new=" -f -d '新 wiki 名 (须符合 NAME_RE)'
 
 # wiki show（--name 有动态值 → A 类，无 -r）
 complete -c llmw -n "__llmw_subact wiki show" -l name -f -a "(__llmw_wikis)" -d '目标 wiki 名'

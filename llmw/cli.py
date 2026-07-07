@@ -169,8 +169,11 @@ def build_parser() -> argparse.ArgumentParser:
     pm_rm.add_argument("--yes", "-y", action="store_true")
 
     # ===== wiki 级 =====
+    # --name 放 parent 上（不 required）：rename 走 --old/--new 替代 name；
+    # 其他子命令 (add/remove/show/config/enter) 依赖 dispatch 时手动校验 args.name。
+    # 这样保留 `wiki --name=X <action>` 旧语法 + 新 `wiki rename --old=... --new=...`。
     p_wiki = sub.add_parser("wiki", help="wiki 子命令", parents=[common])
-    p_wiki.add_argument("--name", required=True, metavar="NAME", help="目标 wiki 名")
+    p_wiki.add_argument("--name", metavar="NAME", help="目标 wiki 名")
     wiki_sub = p_wiki.add_subparsers(dest="wiki_action", metavar="ACTION")
 
     # add
@@ -201,6 +204,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="跳过 --purge 的备份步骤,直接 rmtree(CI / 脚本场景)",
     )
     pw_rm.add_argument("--yes", "-y", action="store_true")
+
+    # rename
+    pw_rename = wiki_sub.add_parser(
+        "rename",
+        help="重命名 wiki (目录 + workspace 索引 + metadata)",
+        parents=[common],
+    )
+    pw_rename.add_argument("--old", required=True, metavar="OLD", help="当前 wiki 名")
+    pw_rename.add_argument(
+        "--new", required=True, metavar="NEW", help="新 wiki 名 (须符合 NAME_RE)"
+    )
 
     # show
     wiki_sub.add_parser("show", help="查看 wiki 详情", parents=[common])
@@ -316,9 +330,11 @@ def main(argv=None) -> int:
             )
 
         if args.command == "wiki":
+            from llmw.errors import MissingRequiredFlag
             from llmw.wiki.manager import (
                 add as wiki_add,
                 remove as wiki_rm,
+                rename as wiki_rename,
                 show as wiki_show,
                 wiki_config_get,
                 wiki_config_set,
@@ -327,6 +343,12 @@ def main(argv=None) -> int:
             )
 
             wa = args.wiki_action
+            # rename 走 --old/--new 替代 --name; 其余子命令必须有 --name
+            if wa != "rename" and not getattr(args, "name", None):
+                raise MissingRequiredFlag(
+                    "wiki 子命令需要 --name=NAME",
+                    hint="rename 走 --old=OLD --new=NEW",
+                )
             if wa == "add":
                 wiki_add(
                     ws_root,
@@ -346,6 +368,14 @@ def main(argv=None) -> int:
                     yes=args.yes,
                     no_backup=args.backup is False,
                 )
+            elif wa == "rename":
+                wiki_rename(
+                    ws_root,
+                    old=args.old,
+                    new=args.new,
+                    as_json=getattr(args, "json", False),
+                    quiet=getattr(args, "quiet", False),
+                )
             elif wa == "show":
                 wiki_show(ws_root, args.name, as_json=getattr(args, "json", False))
             elif wa == "config":
@@ -363,7 +393,7 @@ def main(argv=None) -> int:
                 return wiki_enter(ws_root, args.name, dry_run=args.dry_run)
             else:
                 print(
-                    "[llmw] wiki 子命令需要 ACTION (add/remove/show/config/enter)",
+                    "[llmw] wiki 子命令需要 ACTION (add/remove/rename/show/config/enter)",
                     file=sys.stderr,
                 )
                 return 1

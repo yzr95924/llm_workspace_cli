@@ -223,6 +223,7 @@ _llmw_wiki() {
     WIKI_ACTS=(
         'add:新建 wiki'
         'remove:移除 wiki'
+        'rename:重命名 wiki (目录 + 索引 + metadata)'
         'show:查看 wiki 详情'
         'config:读写 wiki_metadata.toml'
         'enter:启动 AI agent session'
@@ -275,6 +276,13 @@ _llmw_wiki() {
                         '--purge[同时删除 wiki 子目录]' \
                         '--no-backup[跳过 --purge 的备份步骤]' \
                         '(--yes -y)'{--yes,-y}'[跳过确认]' \
+                        "${COMMON_OPTS[@]}" && ret=0
+                    ;;
+                rename)
+                    # --old 从已注册 wiki 中补；--new free-form
+                    _arguments \
+                        '--old=[当前 wiki 名]:old:_llmw_wikis' \
+                        '--new=[新 wiki 名 (须符合 NAME_RE)]:new:' \
                         "${COMMON_OPTS[@]}" && ret=0
                     ;;
                 show)

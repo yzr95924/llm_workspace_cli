@@ -197,6 +197,7 @@ llmw config unset enter_cli
 | --- | --- |
 | `llmw wiki --name=NAME add [--topic=TOPIC] [--display-name=DISPLAY_NAME] [--description=DESC] [--tag=TAG]... [--model=MODEL_ID] [--git]` | 新建 wiki；非 TTY 下 metadata flag 全必填；`--model` 必须在 registry 中；`--git` opt-in 初始化 wiki 子目录 git 仓（spec §7） |
 | `llmw wiki --name=NAME remove [--purge] [--no-backup] [--yes\|-y]` | 移除 wiki；`--purge` 同时删子目录（默认先备份到 `.llmw-trash/<name>-<ISO8601>/`）；`--no-backup` 跳过备份直接 rmtree |
+| `llmw wiki rename --old=OLD --new=NEW [--json] [--quiet]` | 重命名 wiki：3 处同步（`workspace.toml [wikis.<old>]`→`[wikis.<new>]`、`<workspace>/<old>/`→`<workspace>/<new>/`、`wiki_metadata.toml#name`）；若 `topic == OLD`（add 默认值）则同步改 `topic`；4 阶段原子，原目录直至切换前不动；冲突硬阻挡（`WikiExists` / `InvalidWikiName`） |
 | `llmw wiki --name=NAME show [--json]` | 查看 wiki 详情（resolved model 来源 + api_key redact） |
 | `llmw wiki --name=NAME config [get\|set\|unset] [KEY] [VALUE]` | 读写 `wiki_metadata.toml`；无参数 + TTY 进交互模式 |
 | `llmw wiki --name=NAME enter [--dry-run]` | 按 `workspace.toml#enter_cli` 选 agent CLI 启动 session；`claude`（默认）走 overlay + Local 层 settings.local.json 交付 model；`qodercli` 不读 `.claude/`，不交付 model env（详见 [切换 agent CLI](#切换-agent-cli)） |
@@ -301,6 +302,62 @@ LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo remove --purge --yes
 test ! -d "$TMPWS/foo" && echo "✓ remove --purge"
 test -d "$TMPWS/.llmw-trash" && echo "✓ remove backup landed"
 
+rm -rf "$TMPWS"
+```
+
+#### wiki rename
+
+```bash
+TMPWS=$(mktemp -d)
+export LLMW_WORKSPACE="$TMPWS"
+
+llmw init --path="$TMPWS"
+
+# 准备: 建一个 wiki foo(topic 默认 == name)
+LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo add \
+  --topic=foo \
+  --display-name=Foo \
+  --description=demo \
+  --tag=demo \
+  --model=demo-model
+# (model=demo-model 需先在 registry 注册;走 model registry happy path 后此处才能过)
+
+# happy path: foo → bar
+LLMW_WORKSPACE="$TMPWS" llmw wiki rename --old=foo --new=bar
+test ! -d "$TMPWS/foo" && echo "✓ rename: 旧目录清理"
+test -d "$TMPWS/bar" && echo "✓ rename: 新目录就位"
+grep -q '\[wikis\.bar\]' "$TMPWS/workspace.toml" && echo "✓ rename: workspace.toml 切换"
+! grep -q '\[wikis\.foo\]' "$TMPWS/workspace.toml" && echo "✓ rename: 旧 key 注销"
+grep -q '^name = "bar"' "$TMPWS/bar/wiki_metadata.toml" && echo "✓ rename: metadata name 改写"
+grep -q '^topic = "bar"' "$TMPWS/bar/wiki_metadata.toml" && echo "✓ rename: topic 默认值同步"
+
+# --json 输出
+LLMW_WORKSPACE="$TMPWS" llmw wiki rename --old=bar --new=baz --json | grep -q '"topic_changed": true' \
+  && echo "✓ rename --json"
+
+# 错误路径: new 已在 registry
+LLMW_WORKSPACE="$TMPWS" llmw wiki --name=baz add \
+  --topic=baz \
+  --display-name=Baz \
+  --description=demo \
+  --tag=demo \
+  --model=demo-model
+! LLMW_WORKSPACE="$TMPWS" llmw wiki rename --old=baz --new=foo 2>/dev/null \
+  && echo "✓ rename: new 冲突硬阻挡 (foo 早被重命名注销,但残留名占位由 WikiExists 触发)"
+
+# 错误路径: old == new
+! LLMW_WORKSPACE="$TMPWS" llmw wiki rename --old=baz --new=baz 2>/dev/null \
+  && echo "✓ rename: old == new 拒绝"
+
+# 错误路径: NAME_RE 非法
+! LLMW_WORKSPACE="$TMPWS" llmw wiki rename --old=baz --new=BAD 2>/dev/null \
+  && echo "✓ rename: NAME_RE 拒绝大写"
+
+# 错误路径: old 不存在
+! LLMW_WORKSPACE="$TMPWS" llmw wiki rename --old=nope --new=qux 2>/dev/null \
+  && echo "✓ rename: old 不存在拒绝"
+
+# 清理: trash 留作记录不强行 rm
 rm -rf "$TMPWS"
 ```
 

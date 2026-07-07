@@ -72,7 +72,7 @@ _llmw() {
 
     local COMMON="--workspace= --json --debug --quiet -q"
     local TOP="init config list model wiki"
-    local WIKI_ACTS="add remove show config enter"
+    local WIKI_ACTS="add remove rename show config enter"
     local MODEL_ACTS="add list show set-default unset-default remove"
     local CFG_KEYS="default_model templates_version created_at schema_version"
 
@@ -98,7 +98,7 @@ _llmw() {
             COMPREPLY=($(compgen -d -- "${cur#*=}"))
             return 0
             ;;
-        --topic=*|--display-name=*|--description=*|--tag=*|--base-url=*|--api-key=*)
+        --topic=*|--display-name=*|--description=*|--tag=*|--base-url=*|--api-key=*|--new=*)
             # 带值 flag 但值是 free-form；无候选
             COMPREPLY=()
             return 0
@@ -177,6 +177,22 @@ _llmw() {
                         ;;
                     remove)
                         COMPREPLY=($(compgen -W "--purge --no-backup -y --yes $COMMON" -- "$cur"))
+                        ;;
+                    rename)
+                        # --old 必须从已注册 wiki 中选; --new free-form（已在 case 分支前 return 0）
+                        local old_seen=0
+                        i=1
+                        while [ "$i" -lt "$COMP_CWORD" ]; do
+                            case "${COMP_WORDS[$i]}" in
+                                --old=*) old_seen=1 ;;
+                            esac
+                            i=$((i + 1))
+                        done
+                        if [ "$old_seen" -eq 1 ]; then
+                            COMPREPLY=($(compgen -W "$COMMON" -- "$cur"))
+                        else
+                            COMPREPLY=($(compgen -W "--old= --new= $COMMON" -- "$cur"))
+                        fi
                         ;;
                     show)
                         # 检测 --name= 已传否（= 形式；空格形式被 CLI 拒，不认）
