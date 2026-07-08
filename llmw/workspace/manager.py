@@ -534,7 +534,6 @@ def list_wikis(
                 else (meta.model if meta else None),
                 "model_source": model_info["source"] if model_info else None,
                 "created_at": meta.created_at if meta else None,
-                "updated_at": meta.updated_at if meta else None,
                 "last_activity": last_activity,
             }
         )
@@ -564,12 +563,10 @@ def list_wikis(
         return 0
     # meta 缺失时时间列用 "-" 占位, 保持列对齐
     created_cells = [r["created_at"] or "-" for r in rows]
-    updated_cells = [r["updated_at"] or "-" for r in rows]
     last_activity_cells = [r["last_activity"] or "-" for r in rows]
     name_w = max(len(r["name"]) for r in rows + [{"name": "NAME"}])
     path_w = max(len(r["path"]) for r in rows + [{"path": "PATH"}])
     created_w = max(len(c) for c in created_cells + ["CREATED"])
-    updated_w = max(len(c) for c in updated_cells + ["UPDATED"])
     last_activity_w = max(len(c) for c in last_activity_cells + ["LAST_ACTIVITY"])
     dn_w = max(
         len(r["display_name"] or "-") for r in rows + [{"display_name": "DISPLAY_NAME"}]
@@ -587,20 +584,20 @@ def list_wikis(
     model_w = max(len(c) for c in model_cells + ["MODEL"])
     print(
         f"{'NAME'.ljust(name_w)}  {'PATH'.ljust(path_w)}  "
-        f"{'CREATED'.ljust(created_w)}  {'UPDATED'.ljust(updated_w)}  "
+        f"{'CREATED'.ljust(created_w)}  "
         f"{'LAST_ACTIVITY'.ljust(last_activity_w)}  "
         f"{'DISPLAY_NAME'.ljust(dn_w)}  {'TAGS'.ljust(tags_w)}  "
         f"{'MODEL'.ljust(model_w)}"
     )
-    for r, created, updated, last_act, model_cell in zip(
-        rows, created_cells, updated_cells, last_activity_cells, model_cells
+    for r, created, last_act, model_cell in zip(
+        rows, created_cells, last_activity_cells, model_cells
     ):
         prefix = "⚠ " if not r["exists"] else "  "
         dn = r["display_name"] or "-"
         tags = ",".join(r["tags"]) or "-"
         print(
             f"{prefix}{r['name'].ljust(name_w - 2)}  {r['path'].ljust(path_w)}  "
-            f"{created.ljust(created_w)}  {updated.ljust(updated_w)}  "
+            f"{created.ljust(created_w)}  "
             f"{last_act.ljust(last_activity_w)}  "
             f"{dn.ljust(dn_w)}  {tags.ljust(tags_w)}  {model_cell.ljust(model_w)}"
         )

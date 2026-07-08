@@ -571,7 +571,6 @@ def show(workspace_root: Path, name: str, as_json: bool = False) -> None:
             "model_source": model_source,
             "schema_version": meta.schema_version if meta else None,
             "created_at": meta.created_at if meta else None,
-            "updated_at": meta.updated_at if meta else None,
             "last_activity": last_activity,
             "existence": {
                 "claude_md": claude_md_exists,
@@ -589,7 +588,6 @@ def show(workspace_root: Path, name: str, as_json: bool = False) -> None:
 
     # 表格: 收集 (label, value) 对, label 宽度 = max(len(label)), 统一对齐
     created_line = meta.created_at if meta else "-"
-    updated_line = meta.updated_at if meta else "-"
     model_line = final_model or "-"
     if model_source:
         model_line += f"  (fallback: {model_source})"
@@ -602,7 +600,6 @@ def show(workspace_root: Path, name: str, as_json: bool = False) -> None:
         ("TAGS", ",".join(meta.tags) if meta and meta.tags else "-"),
         ("MODEL", model_line),
         ("CREATED_AT", created_line),
-        ("UPDATED_AT", updated_line),
         ("LAST_ACTIVITY", last_activity or "-"),
         ("CLAUDE_MD", "✓ found" if claude_md_exists else "✗ missing"),
         ("WIKI_METADATA", "✓ found" if meta else "✗ missing"),
