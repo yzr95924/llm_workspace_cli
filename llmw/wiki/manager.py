@@ -27,7 +27,7 @@ from llmw._compat import TOMLDecodeError
 from llmw.models.resolve import resolve_for_wiki
 from llmw.models.store import RegistryMissing, load
 from llmw.fsutil import now_iso8601, safe_rmtree
-from llmw.wiki import git_init, init_wiki
+from llmw.wiki import init_wiki
 from llmw.wiki import store as wiki_store
 from llmw.workspace import store as ws_store
 
@@ -40,6 +40,29 @@ def _wiki_abs(workspace_root: Path, name: str) -> Path:
             hint="运行 `llmw list` 查看已注册 wiki",
         )
     return workspace_root / ws.wikis[name].path
+
+
+def _print_git_hint(wiki_dir: Path) -> None:
+    """spec §7 (0.16.0+) git 红线: CLI 不碰 git——落盘后打印手动 hint,让用户自行决定。
+
+    .gitkeep 占位文件已在 init_wiki.render_and_write 无条件落盘(7 个空目录);
+    用户 `git add .` 时空目录自然纳入跟踪。
+    """
+    print(f"[llmw] wiki 已落盘为纯目录树: {wiki_dir}", file=sys.stdout)
+    print("[llmw] 若需 git 版本控制,请手动执行:", file=sys.stdout)
+    print(f"[llmw]   cd {wiki_dir}", file=sys.stdout)
+    print(
+        "[llmw]   git init && git symbolic-ref HEAD refs/heads/main",
+        file=sys.stdout,
+    )
+    print(
+        "[llmw]   git add . && git commit -m 'Initial wiki scaffold'",
+        file=sys.stdout,
+    )
+    print(
+        "[llmw] .gitkeep 占位已放入空目录;后续 raw/ 真实文件由你 `git add` 纳入跟踪。",
+        file=sys.stdout,
+    )
 
 
 def _interactive_fill_metadata(workspace_root, wiki_dir, meta):
@@ -115,7 +138,6 @@ def add(
     description: Optional[str] = None,
     tags: Optional[List[str]] = None,
     model: Optional[str] = None,
-    git: bool = False,
 ) -> Path:
     wiki_store.validate_name(name)
 
@@ -164,9 +186,9 @@ def add(
     if topic is None:
         topic = name
 
-    # 创建子目录(exist_ok=True: 允许目标目录已存在, 此时 --git 由 git_init 内部走
-    # is-inside-work-tree 检查跳过; spec §8 已在更早 check_not_initialized 阻断
-    # CLAUDE.md / wiki/index.md 已存在的覆盖场景)
+    # 创建子目录(exist_ok=True: 允许目标目录已存在; spec §8 已在更早 check_not_initialized
+    # 阻断 AGENTS.md / CLAUDE.md / wiki/index.md / MEMORY.md / tags.md / SCRIPTS.md
+    # 已存在的覆盖场景)
     wiki_dir.mkdir(parents=False, exist_ok=True)
 
     # CLI 内联实现 wiki 骨架(spec 0.2.0 起取代原 setup_wiki.py subprocess)
@@ -209,26 +231,11 @@ def add(
     )
     ws_store.save(workspace_root, ws)
 
-    # opt-in git(spec §7); 前置不通过由 git_init 内部 warn 跳过,不阻断
-    git_applied = False
-    if git:
-        git_applied = git_init.init(wiki_dir)
-
     print(f"[llmw] wiki 已创建: {name} ({wiki_dir})", file=sys.stdout)
-    if git and git_applied:
-        print(
-            "[llmw] 已 git init + commit (分支 main, 消息: Initial wiki scaffold)",
-            file=sys.stdout,
-        )
-    elif git and not git_applied:
-        # 前置不通过(git 缺失 / 已在仓内),已在 stderr 警告
-        pass
-    else:
-        print(
-            "[llmw] 未启用 git: 如需跟踪,手动 `git init && git add . && git commit "
-            "-m 'Initial wiki scaffold'`;或下次 add 时加 --git",
-            file=sys.stdout,
-        )
+    # spec §7 (0.16.0+) git 红线: CLI 不碰 git,统一打印手动 hint。
+    # (cli.py 的 `--git` flag 保留为向后兼容的 vestigial flag,不再传到本函数;
+    # 0.16.0 前它会触发 git init/commit,现已无操作——无论是否传 --git 都打印同一份 hint)
+    _print_git_hint(wiki_dir)
     return wiki_dir
 
 

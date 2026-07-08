@@ -187,7 +187,7 @@ def _write_workspace_claude_md(workspace_root: Path, display_name: str) -> None:
 
     薄壳 = @AGENTS.md 一行 + 声明 (~10 行);CLI 仅在 init 时拷模板 + 替换 1 占位符
       {{WORKSPACE_DISPLAY_NAME}} (薄壳不持 spec 版本——版本在 AGENTS.md §六)。
-    共享 4 键 mapping, str.replace 对不存在的 key 是 no-op, 不影响薄壳渲染。
+    spec §4 字面: 薄壳仅替换 WORKSPACE_DISPLAY_NAME,不共享 AGENTS.md 的 4 键 mapping。
 
     spec §12: CLAUDE.md 已存在 → 拒绝覆盖 (薄壳也是 schema, 用户所有)。
     """
@@ -212,19 +212,13 @@ def _write_workspace_claude_md(workspace_root: Path, display_name: str) -> None:
             hint="检查 my_SKILL/llm-workspace-management/references/ 是否完整",
         )
 
-    mapping = {
-        "WORKSPACE_DISPLAY_NAME": display_name,
-        "SETUP_DATE": date.today().isoformat(),
-        "WORKSPACE_SPEC_VERSION": WORKSPACE_SPEC_VERSION,
-        "CLI_VERSION": __version__,
-    }
-    for k, v in mapping.items():
-        tmpl = tmpl.replace("{{" + k + "}}", v)
+    # spec §4: 薄壳仅替换 WORKSPACE_DISPLAY_NAME。残留占位符 = 模板漂移,assert 兜底。
+    tmpl = tmpl.replace("{{WORKSPACE_DISPLAY_NAME}}", display_name)
     leftover = re.findall(r"\{\{[^}]+\}\}", tmpl)
     if leftover:
         raise SetupFailed(
             f"workspace CLAUDE.md 模板占位符未替换干净: {leftover}",
-            hint="检查模板占位符与 mapping 是否匹配",
+            hint="薄壳模板应仅含 {{WORKSPACE_DISPLAY_NAME}};检查模板是否漂移",
         )
 
     try:

@@ -1,14 +1,18 @@
 """wiki 仓初始化: 读 SKILL 仓 references/ 下的模板与 fixtures,
-按 wiki-spec.md v0.11.0 §1-§6 + §9.1 + §14 把 wiki 仓"出生形态"落盘.
+按 wiki-spec.md v0.19.0 §1-§7 + §9.1 + §14 把 wiki 仓"出生形态"落盘.
 
 CLI 内联实现(spec 0.2.0 起 wiki 创建归 CLI 负责,SKILL 仓只管运行时纪律).
 fixtures 是 CLI 字节级金标准(fixtures/README.md 附录 A):
 渲染后用 cmp -s 与 fixtures / canonical 比对,不一致 = CLI 实现 bug.
 
-落盘 8 件产物(2026-07 spec 0.11.0 对齐后, AGENTS.md SSOT 拆出):
+落盘 8 件产物(spec 0.11.0 AGENTS.md SSOT 拆出):
   AGENTS.md, CLAUDE.md(薄壳), .gitignore, wiki/index.md, wiki/log.md,
   MEMORY/MEMORY.md, wiki/tags.md, scripts/SCRIPTS.md
 子目录: raw/{articles,assets}, wiki/{5 类内容页}, MEMORY/, scripts/
+
+git 红线(spec §7, 0.16.0+): CLI 绝不碰 git——init 仅落盘目录树 + .gitkeep 占位
++ 打印手动 hint;所有 git 操作由用户自行触发。.gitkeep 无条件落盘(7 个空目录:
+5 内容页 + raw/articles + raw/assets),便于用户后续 `git add .` 跟踪空目录。
 """
 
 import re
@@ -29,6 +33,13 @@ _CONTENT_SUBDIRS = [
     "syntheses",
 ]
 _RAW_SUBDIRS = ["articles", "assets"]
+
+# spec §7 step 3 (0.15.0+): 需要 .gitkeep 占位的空目录——5 内容页子目录 + raw 两个默认
+# 子目录。MEMORY/ 与 scripts/ 不需要(各有真实索引文件 MEMORY.md / SCRIPTS.md 让目录被
+# git 跟踪)。.gitkeep 无条件落盘(不 gated on --git),纯目录树下无害。
+_GITKEEP_DIRS = [Path("wiki") / d for d in _CONTENT_SUBDIRS] + [
+    Path("raw") / d for d in _RAW_SUBDIRS
+]
 
 
 def check_not_initialized(wiki_dir: Path) -> None:
@@ -74,7 +85,7 @@ def render_and_write(
     cli_version: str,
     spec_version: str,
 ) -> None:
-    """按 wiki-spec.md v0.11.0 落盘 wiki 仓骨架.
+    """按 wiki-spec.md v0.19.0 落盘 wiki 仓骨架.
 
     Args:
         wiki_dir: wiki 仓根目录 (含路径名);调用方应已 mkdir 此目录.
@@ -86,6 +97,10 @@ def render_and_write(
     Raises:
         SkillMissing: SKILL submodule 的 references/ 目录不存在.
         SetupFailed: 模板读取失败 / 占位符残留 / atomic_write 失败.
+
+    Note:
+        spec §7 (0.16.0+): 本函数不碰 git——仅落盘目录树 + .gitkeep 占位 + 8 份字面量
+        产物;所有 git 操作由用户自行触发(调用方负责打印手动 hint)。
     """
     refs = wiki_spec_templates_dir()
     if not refs.is_dir():
@@ -138,8 +153,7 @@ def render_and_write(
     except SetupFailed:
         raise
 
-    # 落盘顺序: 先建所有子目录, 再 atomic_write 8 份字面量产物
-    # (atomic_write 内部也 mkdir parent, 但 spec §1 要求显式建 5 个空子目录以备后续 .gitkeep)
+    # 落盘顺序: 先建所有子目录, 再 .gitkeep 占位, 再 atomic_write 8 份字面量产物
     # MEMORY/ 0.10.0+ 起在 wiki 根,与 wiki/ 平级;scripts/ 0.9.0+ 必须始终创建
     for d in (
         [wiki_dir / "raw" / x for x in _RAW_SUBDIRS]
@@ -148,6 +162,14 @@ def render_and_write(
         + [wiki_dir / "scripts"]
     ):
         d.mkdir(parents=True, exist_ok=True)
+
+    # spec §7 step 3 (0.16.0+): .gitkeep 无条件落盘——7 个空目录占位,便于用户后续
+    # `git add .` 跟踪。touch 是幂等 best-effort:目录已建,空文件无害;失败不阻断落盘。
+    for rel in _GITKEEP_DIRS:
+        try:
+            (wiki_dir / rel / ".gitkeep").touch()
+        except OSError:
+            pass
 
     try:
         # spec §2 (0.11.0+): 先写 AGENTS.md (SSOT), 再写 CLAUDE.md (薄壳)

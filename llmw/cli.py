@@ -187,7 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--git",
         action="store_true",
         default=False,
-        help="opt-in: 初始化 git 仓 (spec §7);默认不碰 git",
+        help="vestigial (spec §7 0.16.0+): git 操作现已全部由用户手动;"
+        "flag 仅为向后兼容保留,无实际效果——落盘后打印的手动 hint 见输出",
     )
 
     # remove
@@ -358,7 +359,6 @@ def main(argv=None) -> int:
                     description=args.description,
                     tags=args.tags or None,
                     model=args.model,
-                    git=args.git,
                 )
             elif wa == "remove":
                 wiki_rm(

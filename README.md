@@ -195,7 +195,7 @@ llmw config unset enter_cli
 
 | 命令 | 作用 |
 | --- | --- |
-| `llmw wiki --name=NAME add [--topic=TOPIC] [--display-name=DISPLAY_NAME] [--description=DESC] [--tag=TAG]... [--model=MODEL_ID] [--git]` | 新建 wiki；非 TTY 下 metadata flag 全必填；`--model` 必须在 registry 中；`--git` opt-in 初始化 wiki 子目录 git 仓（spec §7） |
+| `llmw wiki --name=NAME add [--topic=TOPIC] [--display-name=DISPLAY_NAME] [--description=DESC] [--tag=TAG]... [--model=MODEL_ID] [--git]` | 新建 wiki；非 TTY 下 metadata flag 全必填；`--model` 必须在 registry 中；`--git` 为 vestigial flag（spec §7 0.16.0+：git 操作全部由用户手动，CLI 不碰 git；落盘后打印手动 hint） |
 | `llmw wiki --name=NAME remove [--purge] [--no-backup] [--yes\|-y]` | 移除 wiki；`--purge` 同时删子目录（默认先备份到 `.llmw-trash/<name>-<ISO8601>/`）；`--no-backup` 跳过备份直接 rmtree |
 | `llmw wiki rename --old=OLD --new=NEW [--json] [--quiet]` | 重命名 wiki：3 处同步（`workspace.toml [wikis.<old>]`→`[wikis.<new>]`、`<workspace>/<old>/`→`<workspace>/<new>/`、`wiki_metadata.toml#name`）；若 `topic == OLD`（add 默认值）则同步改 `topic`；4 阶段原子，原目录直至切换前不动；冲突硬阻挡（`WikiExists` / `InvalidWikiName`） |
 | `llmw wiki --name=NAME show [--json]` | 查看 wiki 详情（resolved model 来源 + api_key redact） |
