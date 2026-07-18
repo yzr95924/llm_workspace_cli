@@ -99,12 +99,12 @@ complete -c llmw -n "__fish_seen_subcommand_from config; and not __fish_seen_sub
 complete -c llmw -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from get set unset" -f -a "unset"  -d '清值'
 
 complete -c llmw -n "__fish_seen_subcommand_from config get unset" -f -a "default_model"        -d '默认 model_id'
-complete -c llmw -n "__fish_seen_subcommand_from config get unset" -f -a "enter_cli"           -d 'agent CLI (claude|qodercli)'
+complete -c llmw -n "__fish_seen_subcommand_from config get unset" -f -a "enter_cli"           -d 'agent CLI (claude|qodercli|opencode)'
 complete -c llmw -n "__fish_seen_subcommand_from config get unset" -f -a "templates_version"    -d 'templates 版本(只读)'
 complete -c llmw -n "__fish_seen_subcommand_from config get unset" -f -a "created_at"           -d '创建时间(只读)'
 complete -c llmw -n "__fish_seen_subcommand_from config get unset" -f -a "schema_version"       -d 'schema 版本(只读)'
 complete -c llmw -n "__fish_seen_subcommand_from config set"       -f -a "default_model"        -d '默认 model_id'
-complete -c llmw -n "__fish_seen_subcommand_from config set"       -f -a "enter_cli"           -d 'agent CLI (claude|qodercli)'
+complete -c llmw -n "__fish_seen_subcommand_from config set"       -f -a "enter_cli"           -d 'agent CLI (claude|qodercli|opencode)'
 
 # ===== model 子命令 =====
 set -l MODEL_ACTS add list show set-default unset-default remove

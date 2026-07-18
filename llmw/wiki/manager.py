@@ -259,8 +259,8 @@ def _purge_with_backup(
     Raises:
         BackupFailed: 备份步骤任一失败(mkdir / rename);失败时不删 wiki。
     """
-    # 1. 确保 .llmw-trash/ 在 workspace .gitignore(managed block 升级)
-    # 老 workspace 只有 2 行 block 时,会自动替换为新 3 行 block。
+    # 1. 确保 workspace .gitignore managed block 为最新版（含 .llmw-trash/ 排除行）
+    # 老 workspace 的旧版 block（行数/内容不等）会被整体替换为当前 GITIGNORE_LINES。
     # .gitignore 写入失败不阻断备份(用户可手动 gitignore)。
     try:
         from llmw.workspace.manager import _ensure_workspace_gitignore

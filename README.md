@@ -109,7 +109,7 @@ llmw wiki --name=llm-systems show
 # 编辑 metadata（交互模式）
 llmw wiki --name=llm-systems config
 
-# 启动 AI agent session（核心命令；默认 claude 走 overlay 写 <wiki>/.claude/settings.local.json；workspace.toml#enter_cli=qodercli 切换）
+# 启动 AI agent session（核心命令；默认 claude 走 overlay 写 <wiki>/.claude/settings.local.json；workspace.toml#enter_cli 可切 qodercli/opencode）
 llmw wiki --name=llm-systems enter
 # 先看命令再跑:
 llmw wiki --name=llm-systems enter --dry-run
@@ -139,7 +139,7 @@ llmw wiki --name=llm-systems remove --purge --no-backup --yes  # 跳过备份，
 | KEY | set | unset | 说明 |
 | --- | :-: | :-: | --- |
 | `default_model` | ✓ | ✓ | workspace 级兜底 model（Phase 2 后真正生效的是 registry 的 `is_default=true` 条目） |
-| `enter_cli` | ✓ | ✓ | 选 `wiki enter` 启动的 agent CLI；`claude` (默认) \| `qodercli`。详见 [切换 agent CLI](#切换-agent-cli) |
+| `enter_cli` | ✓ | ✓ | 选 `wiki enter` 启动的 agent CLI；`claude` (默认) \| `qodercli` \| `opencode`。详见 [切换 agent CLI](#切换-agent-cli) |
 | `templates_version` | ✗ | ✗ | 只读，编码双 spec 版本 |
 | `created_at` | ✗ | ✗ | 只读 |
 | `schema_version` | ✗ | ✗ | 只读 |
@@ -147,7 +147,7 @@ llmw wiki --name=llm-systems remove --purge --no-backup --yes  # 跳过备份，
 ### 切换 agent CLI
 
 `wiki enter` 默认走 Claude Code（`claude`），可通过 `workspace.toml#enter_cli`
-切换为 `qodercli` 等其它 agent CLI。配置项存于 workspace 根的
+切换为 `qodercli` / `opencode` 等其它 agent CLI。配置项存于 workspace 根的
 `workspace.toml`，是 workspace 级开关——同一 workspace 下所有 wiki 共用。
 
 ```bash
@@ -160,25 +160,43 @@ llmw config get enter_cli
 llmw wiki --name=<wiki> enter --dry-run   # 看到 backend: qodercli / qodercli --add-dir <wiki>
 llmw wiki --name=<wiki> enter
 
+# 切到 opencode（仍解析 model；overlay 写 <wiki>/opencode.json）
+llmw config set enter_cli opencode
+llmw wiki --name=<wiki> enter --dry-run   # 看到 backend: opencode / opencode <wiki>
+llmw wiki --name=<wiki> enter
+
 # 回退默认
 llmw config unset enter_cli
 ```
 
 字段语义与行为差异：
 
-| `enter_cli` | 命令 | model 解析 | overlay 写 `<wiki>/.claude/settings.local.json` | `--system-prompt` |
-| --- | --- | --- | --- | --- |
-| `claude`（默认） | `claude --add-dir <wiki>` | ✓ resolve_for_wiki | ✓ Local 层，env 块含 `ANTHROPIC_*` + habit template | ✓ 传 `<wiki>/CLAUDE.md` 内容 |
-| `qodercli` | `qodercli --add-dir <wiki>` | ✗ 跳过 | ✗ | ✗（qodercli 自读 `<wiki>/AGENTS.md`） |
+| `enter_cli` | 命令 | model 解析 | overlay 交付 |
+| --- | --- | --- | --- |
+| `claude`（默认） | `claude --add-dir <wiki>` | ✓ resolve_for_wiki | `<wiki>/.claude/settings.local.json`（Local 层，env 块含 `ANTHROPIC_*` + habit template） |
+| `opencode` | `opencode <wiki>` | ✓ resolve_for_wiki | `<wiki>/opencode.json`（项目级，`provider.llmw` + 顶层 `model`；无 habit template） |
+| `qodercli` | `qodercli --add-dir <wiki>` | ✗ 跳过 | ✗ |
 
+> 三个 backend 都不显式注入 system prompt / 上下文文件——agent 从 cwd=wiki 自读
+> （claude 读 `<wiki>/CLAUDE.md`；opencode / qodercli 读 `<wiki>/AGENTS.md`）。
+>
 > qodercli 路径完全跳过 `llmw/models/overlay.py` 与
 > `llmw/models/resolve.py`：agent 自己处理模型配置与 schema 上下文。
 > `overlay-habit-template`（Claude-Code-specific habit env）与
 > `agent-settings-env-precedence`（Local > User settings 优先级）不适用于 qodercli。
+>
+> opencode 路径走 `llmw/models/overlay_opencode.py`（不经过 overlay.py）：apiKey 明文写
+> `<wiki>/opencode.json` + chmod 600，由 workspace `.gitignore` managed block 的
+> `**/opencode.json` 行排除出 git（与 `settings*.json` 同一安全模型）；npm 包固定
+> `@ai-sdk/anthropic`（registry 的 base_url 与 `ANTHROPIC_BASE_URL` 同源，即 Anthropic
+> 协议网关），且渲染时 baseURL 自动补 `/v1` 段（registry 存的是 Claude Code 约定
+> `{base}/v1/messages`，AI SDK 约定 `{baseURL}/messages`）。
+> `overlay-habit-template` 与 `agent-settings-env-precedence` 同样不适用
+> （那是 Claude Code settings 机制）。
 
 合法取值（白名单写在 `llmw/workspace/manager.py:_ENTER_CLI_WHITELIST`）：
-`claude` / `qodercli`。其它值 `config set` 时会被挡掉，提示
-`可选: claude, qodercli`，退出码 1。
+`claude` / `qodercli` / `opencode`。其它值 `config set` 时会被挡掉，提示
+`可选: claude, opencode, qodercli`，退出码 1。
 
 ### model registry（Phase 2，源数据 `workspace_models.toml`，不入 git）
 
@@ -200,7 +218,7 @@ llmw config unset enter_cli
 | `llmw wiki rename --old=OLD --new=NEW [--json] [--quiet]` | 重命名 wiki：3 处同步（`workspace.toml [wikis.<old>]`→`[wikis.<new>]`、`<workspace>/<old>/`→`<workspace>/<new>/`、`wiki_metadata.toml#name`）；若 `topic == OLD`（add 默认值）则同步改 `topic`；4 阶段原子，原目录直至切换前不动；冲突硬阻挡（`WikiExists` / `InvalidWikiName`） |
 | `llmw wiki --name=NAME show [--json]` | 查看 wiki 详情（resolved model 来源 + api_key redact） |
 | `llmw wiki --name=NAME config [get\|set\|unset] [KEY] [VALUE]` | 读写 `wiki_metadata.toml`；无参数 + TTY 进交互模式 |
-| `llmw wiki --name=NAME enter [--dry-run]` | 按 `workspace.toml#enter_cli` 选 agent CLI 启动 session；`claude`（默认）走 overlay + Local 层 settings.local.json 交付 model；`qodercli` 不读 `.claude/`，不交付 model env（详见 [切换 agent CLI](#切换-agent-cli)） |
+| `llmw wiki --name=NAME enter [--dry-run]` | 按 `workspace.toml#enter_cli` 选 agent CLI 启动 session；`claude`（默认）走 overlay + Local 层 settings.local.json 交付 model；`opencode` 走 overlay + 项目级 opencode.json 交付 model；`qodercli` 不读 `.claude/`，不交付 model（详见 [切换 agent CLI](#切换-agent-cli)） |
 
 `llmw wiki --name=X config` 合法 KEY（`llmw/wiki/manager.py:WIKI_CONFIG_KEYS`）：
 
@@ -263,6 +281,8 @@ LLMW_WORKSPACE="$TMPWS" llmw config get default_model
 LLMW_WORKSPACE="$TMPWS" llmw config unset default_model
 LLMW_WORKSPACE="$TMPWS" llmw config set enter_cli qodercli
 LLMW_WORKSPACE="$TMPWS" llmw config get enter_cli
+LLMW_WORKSPACE="$TMPWS" llmw config set enter_cli opencode
+LLMW_WORKSPACE="$TMPWS" llmw config get enter_cli
 LLMW_WORKSPACE="$TMPWS" llmw config unset enter_cli
 
 # list (空)
@@ -296,6 +316,11 @@ LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo config get tags
 
 # enter --dry-run（bool flag 无值）
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo enter --dry-run
+
+# enter --dry-run（opencode backend：resolve 生效，overlay 目标是 <wiki>/opencode.json）
+LLMW_WORKSPACE="$TMPWS" llmw config set enter_cli opencode
+LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo enter --dry-run
+LLMW_WORKSPACE="$TMPWS" llmw config unset enter_cli
 
 # remove（--purge / --yes / --no-backup 都是 bool flag）
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo remove --purge --yes

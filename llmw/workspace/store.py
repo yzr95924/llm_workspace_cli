@@ -29,7 +29,7 @@ class WorkspaceToml:
     created_at: str
     templates_version: str = "1"
     default_model: Optional[str] = None
-    enter_cli: Optional[str] = None  # "claude" (默认) | "qodercli"
+    enter_cli: Optional[str] = None  # "claude" (默认) | "qodercli" | "opencode"
     wikis: Dict[str, WikiEntry] = field(default_factory=dict)
 
     @property

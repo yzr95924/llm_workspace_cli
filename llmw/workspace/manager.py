@@ -36,7 +36,7 @@ CONFIG_KEYS = {
 }
 
 
-_ENTER_CLI_WHITELIST = frozenset({"claude", "qodercli"})
+_ENTER_CLI_WHITELIST = frozenset({"claude", "qodercli", "opencode"})
 
 
 def _check_enter_cli(value: str) -> None:
@@ -50,19 +50,23 @@ def _check_enter_cli(value: str) -> None:
 
 # ===== workspace 级 .gitignore helper =====
 
-# workspace 级 .gitignore managed block 内容（spec workspace-spec.md §10 v0.6.1 + llmw 自有 trash）
+# workspace 级 .gitignore managed block 内容（spec workspace-spec.md §10 v0.6.1 + llmw 自有扩展）
 # 前 3 行严格对齐 spec §10 v0.6.1（registry + Claude Code / Qoder IDE 项目级 overlay）。
 # 单仓模型：wiki 是 workspace 直属子目录，**/.<agent>/settings*.json 通配覆盖所有
 # wiki 的 overlay secret，不依赖 per-wiki .gitignore / wiki scaffold（见 §10）。
 # 0.5.0 加 .qoder，0.6.0 把 */ 改 **/（覆盖 workspace 根级），0.6.1 把 settings.local.json
 # 加宽到 settings*.json（含 settings.json / settings.<env>.json 等所有变体）。
-# 第 4 行 .llmw-trash/ 为 llmw 自有扩展（spec §10 字面未列）：wiki remove --purge
-# 写入的备份目录，spec 允许"至少包含"语义下保留以避免误提交（见 MEMORY 驳正条目）。
+# 后 2 行为 llmw 自有扩展（spec §10 字面未列，"至少包含"语义下保留以避免误提交，
+# 见 MEMORY 驳正条目）：
+# - .llmw-trash/       wiki remove --purge 写入的备份目录
+# - **/opencode.json   enter_cli=opencode 的 overlay 落盘（含明文 apiKey，与
+#                      settings*.json 同一安全模型，见 llmw/models/overlay_opencode.py）
 GITIGNORE_LINES = (
     "workspace_models.toml",
     "**/.claude/settings*.json",
     "**/.qoder/settings*.json",
     ".llmw-trash/",
+    "**/opencode.json",
 )
 
 # spec §10: workspace .gitignore 的通用忽略段（OS / 编辑器 / Obsidian / 临时）。
