@@ -30,6 +30,9 @@ class WorkspaceToml:
     templates_version: str = "1"
     default_model: Optional[str] = None
     enter_cli: Optional[str] = None  # "claude" (默认) | "qodercli" | "opencode"
+    # True = wiki enter 在 byobu 固定 session (llm_workspace) 按 wiki 名开窗口；
+    # None/False = 现状阻塞直启。session 名是代码常量（llmw/wiki/byobu.py），不可配。
+    enter_byobu: Optional[bool] = None
     wikis: Dict[str, WikiEntry] = field(default_factory=dict)
 
     @property
@@ -59,12 +62,17 @@ def load(workspace_root: Path) -> WorkspaceToml:
             created_at=info["created_at"],
         )
 
+    # 严格只吃真 TOML 布尔；手改成 "true"/"false" 字符串按 unset 处理
+    # （防 Python bool("false") is True 的陷阱把 byobu 模式静默打开）
+    enter_byobu_raw = raw.get("enter_byobu")
+
     return WorkspaceToml(
         schema_version=sv,
         created_at=raw["created_at"],
         templates_version=raw.get("templates_version", "1"),
         default_model=raw.get("default_model"),
         enter_cli=raw.get("enter_cli"),
+        enter_byobu=enter_byobu_raw if isinstance(enter_byobu_raw, bool) else None,
         wikis=wikis,
     )
 
@@ -81,6 +89,9 @@ def save(workspace_root: Path, ws: WorkspaceToml) -> None:
         data["default_model"] = ws.default_model
     if ws.enter_cli is not None and ws.enter_cli != "claude":
         data["enter_cli"] = ws.enter_cli
+    # 仅 True 落盘（enter_byobu = true）；None/False 同态——行不存在即为关
+    if ws.enter_byobu:
+        data["enter_byobu"] = True
 
     if ws.wikis:
         wiki_table = {}

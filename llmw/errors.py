@@ -133,6 +133,16 @@ class ClaudeNotFound(LlmwError):
     user_message = "agent CLI 不在 PATH"
 
 
+class ByobuNotFound(LlmwError):
+    exit_code = 2
+    user_message = "byobu-tmux 不在 PATH"
+
+
+class ByobuCommandFailed(LlmwError):
+    exit_code = 2
+    user_message = "byobu/tmux 命令执行失败"
+
+
 class PythonUnavailable(LlmwError):
     exit_code = 2
     user_message = "sys.executable 不可执行"

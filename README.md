@@ -109,7 +109,7 @@ llmw wiki --name=llm-systems show
 # 编辑 metadata（交互模式）
 llmw wiki --name=llm-systems config
 
-# 启动 AI agent session（核心命令；默认 claude 走 overlay 写 <wiki>/.claude/settings.local.json；workspace.toml#enter_cli 可切 qodercli/opencode）
+# 启动 AI agent session（核心命令；默认 claude 走 overlay 写 <wiki>/.claude/settings.local.json；workspace.toml#enter_cli 可切 qodercli/opencode；enter_byobu=true 时改在 byobu session 开窗口）
 llmw wiki --name=llm-systems enter
 # 先看命令再跑:
 llmw wiki --name=llm-systems enter --dry-run
@@ -140,6 +140,7 @@ llmw wiki --name=llm-systems remove --purge --no-backup --yes  # 跳过备份，
 | --- | :-: | :-: | --- |
 | `default_model` | ✓ | ✓ | workspace 级兜底 model（Phase 2 后真正生效的是 registry 的 `is_default=true` 条目） |
 | `enter_cli` | ✓ | ✓ | 选 `wiki enter` 启动的 agent CLI；`claude` (默认) \| `qodercli` \| `opencode`。详见 [切换 agent CLI](#切换-agent-cli) |
+| `enter_byobu` | ✓ | ✓ | `true` 时 `wiki enter` 在 byobu 固定 session `llm_workspace` 按 wiki 名开窗口（已有同名窗口则复用）；unset/false = 阻塞直启。详见 [byobu 窗口模式](#byobu-窗口模式) |
 | `templates_version` | ✗ | ✗ | 只读，编码双 spec 版本 |
 | `created_at` | ✗ | ✗ | 只读 |
 | `schema_version` | ✗ | ✗ | 只读 |
@@ -198,6 +199,46 @@ llmw config unset enter_cli
 `claude` / `qodercli` / `opencode`。其它值 `config set` 时会被挡掉，提示
 `可选: claude, opencode, qodercli`，退出码 1。
 
+### byobu 窗口模式
+
+`wiki enter` 默认阻塞直启（agent 的 TUI 占住当前终端，退出码来自 agent）。
+开 `enter_byobu` 后，所有 `wiki enter` 改为在 byobu **固定 session `llm_workspace`**
+里按 wiki 名开窗口跑 agent——fire-and-forget：窗口建成 llmw 即返回 0，不等 agent
+退出、退出码不来自 agent。与 `enter_cli` 正交：claude / qodercli / opencode 三
+backend 通用（model resolve + overlay 落盘逻辑不变，只换最终 spawn 方式）。
+
+```bash
+llmw config set enter_byobu true
+llmw wiki --name=<wiki> enter --dry-run   # 看到 spawn: byobu + 将执行的 byobu-tmux 命令
+llmw wiki --name=<wiki> enter             # 立即返回 0；窗口在 llm_workspace session 里
+byobu attach -t llm_workspace             # 查看（llmw 若跑在该 session 内则已自动切焦）
+llmw config unset enter_byobu             # 回退阻塞直启
+```
+
+行为细则：
+
+- **session 名固定 `llm_workspace`**（代码常量 `llmw/wiki/byobu.py:_BYOBU_SESSION`，
+  不可配）；不存在则自动创建（`new-session -d` 与首个窗口一步建成，不留裸 shell 窗口）。
+- **窗口名 == wiki 名**；同一 wiki 重复 `enter` 时已有同名窗口 → `select-window`
+  切过去**复用，不新建**（agent 退出窗口自动关，届时再 enter 即重建）。
+- 复用时 overlay 文件照常刷新落盘，但**运行中的 agent 不会重读**——改了 model
+  想生效，先退出该窗口里的 agent 再 re-enter。
+- 窗口环境：`cwd = <wiki>`（`new-window -c`），`LLM_WIKI_ROOT` 经 `-e` 注入
+  （tmux server 环境不继承 llmw 进程 env）；agent 二进制先解析为绝对路径再下窗
+  （tmux server 的 PATH 可能不含 `~/.local/bin`）。
+- 引导提示：llmw 跑在 `llm_workspace` session 内 → 自动切焦；跑在其它 tmux
+  session 内 → 提示 `byobu-tmux switch-client -t llm_workspace`；不在 tmux 内 →
+  提示 `byobu attach -t llm_workspace`。
+
+已知限制：
+
+- 仅支持 byobu 的 tmux backend（调用走 `byobu-tmux`，经 argv[0] 强制
+  `BYOBU_BACKEND=tmux`）；screen backend 不支持。
+- session 名全局固定：多个 workspace 的同名 wiki 会共用窗口（复用判定只看窗口名）。
+- `wiki remove` 不清对应 byobu 窗口——被删 wiki 的窗口里 agent 若还在跑，需手动关。
+- 并发 double-enter 竞争不上锁：极端情况会产生同名双窗口（tmux 允许共存，下次
+  enter 复用第一个），属良性。
+
 ### model registry（Phase 2，源数据 `workspace_models.toml`，不入 git）
 
 | 命令 | 作用 |
@@ -218,7 +259,7 @@ llmw config unset enter_cli
 | `llmw wiki rename --old=OLD --new=NEW [--json] [--quiet]` | 重命名 wiki：3 处同步（`workspace.toml [wikis.<old>]`→`[wikis.<new>]`、`<workspace>/<old>/`→`<workspace>/<new>/`、`wiki_metadata.toml#name`）；若 `topic == OLD`（add 默认值）则同步改 `topic`；4 阶段原子，原目录直至切换前不动；冲突硬阻挡（`WikiExists` / `InvalidWikiName`） |
 | `llmw wiki --name=NAME show [--json]` | 查看 wiki 详情（resolved model 来源 + api_key redact） |
 | `llmw wiki --name=NAME config [get\|set\|unset] [KEY] [VALUE]` | 读写 `wiki_metadata.toml`；无参数 + TTY 进交互模式 |
-| `llmw wiki --name=NAME enter [--dry-run]` | 按 `workspace.toml#enter_cli` 选 agent CLI 启动 session；`claude`（默认）走 overlay + Local 层 settings.local.json 交付 model；`opencode` 走 overlay + 项目级 opencode.json 交付 model；`qodercli` 不读 `.claude/`，不交付 model（详见 [切换 agent CLI](#切换-agent-cli)） |
+| `llmw wiki --name=NAME enter [--dry-run]` | 按 `workspace.toml#enter_cli` 选 agent CLI 启动 session；`claude`（默认）走 overlay + Local 层 settings.local.json 交付 model；`opencode` 走 overlay + 项目级 opencode.json 交付 model；`qodercli` 不读 `.claude/`，不交付 model（详见 [切换 agent CLI](#切换-agent-cli)）；`enter_byobu=true` 时改为在 byobu 固定 session 按 wiki 名开窗口（fire-and-forget，详见 [byobu 窗口模式](#byobu-窗口模式)） |
 
 `llmw wiki --name=X config` 合法 KEY（`llmw/wiki/manager.py:WIKI_CONFIG_KEYS`）：
 
@@ -321,6 +362,19 @@ LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo enter --dry-run
 LLMW_WORKSPACE="$TMPWS" llmw config set enter_cli opencode
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo enter --dry-run
 LLMW_WORKSPACE="$TMPWS" llmw config unset enter_cli
+
+# byobu 窗口模式（fire-and-forget；真实 enter 需 claude 在 PATH——窗口里会起真 agent，
+# 验证完 kill-session 一并清理）
+LLMW_WORKSPACE="$TMPWS" llmw config set enter_byobu true
+LLMW_WORKSPACE="$TMPWS" llmw config get enter_byobu    # true
+LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo enter --dry-run   # spawn: byobu + byobu-tmux 决策树
+LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo enter     # 立即返回 0
+byobu-tmux list-windows -t llm_workspace -F '#W' | grep -q '^foo$' && echo "✓ byobu: window created"
+LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo enter >/dev/null  # 再 enter → 复用不新建
+test "$(byobu-tmux list-windows -t llm_workspace -F '#W' | grep -c '^foo$')" = "1" \
+  && echo "✓ byobu: reuse (no dup)"
+byobu-tmux kill-session -t llm_workspace   # 清理（连窗口里的 agent 一起杀）
+LLMW_WORKSPACE="$TMPWS" llmw config unset enter_byobu
 
 # remove（--purge / --yes / --no-backup 都是 bool flag）
 LLMW_WORKSPACE="$TMPWS" llmw wiki --name=foo remove --purge --yes

@@ -233,7 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
     # enter
     pw_enter = wiki_sub.add_parser(
         "enter",
-        help="启动 AI agent session (默认 claude，workspace.toml#enter_cli 可切 qodercli/opencode)",
+        help="启动 AI agent session (默认 claude，workspace.toml#enter_cli 可切 qodercli/opencode；enter_byobu=true 时在 byobu 固定 session 开窗口)",
         parents=[common],
     )
     pw_enter.add_argument("--dry-run", action="store_true", dest="dry_run")

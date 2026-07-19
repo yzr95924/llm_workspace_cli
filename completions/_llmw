@@ -108,6 +108,7 @@ _llmw_config() {
     CFG_KEYS=(
         'default_model:默认 model_id'
         'enter_cli:agent CLI (claude|qodercli|opencode)'
+        'enter_byobu:byobu 窗口模式 (true|false)'
         'templates_version:templates 版本(只读)'
         'created_at:创建时间(只读)'
         'schema_version:schema 版本(只读)'
@@ -134,7 +135,7 @@ _llmw_config() {
                         "${COMMON_OPTS[@]}" && ret=0
                     case $state in
                         set_key)
-                            local -a SET_KEYS=('default_model:默认 model_id' 'enter_cli:agent CLI (claude|qodercli|opencode)')
+                            local -a SET_KEYS=('default_model:默认 model_id' 'enter_cli:agent CLI (claude|qodercli|opencode)' 'enter_byobu:byobu 窗口模式 (true|false)')
                             _describe -t keys 'config key' SET_KEYS
                             ;;
                     esac

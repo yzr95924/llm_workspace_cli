@@ -11,16 +11,24 @@ opencode 路径（enter_cli = "opencode"）：与 claude 同族——resolve_for
 
 qodercli 路径（enter_cli = "qodercli"）：跳过 overlay.apply / 不解析 model /
 不写 .claude/——只把 wiki 目录传给 qodercli（qodercli 自读 AGENTS.md）。
+
+byobu 窗口模式（workspace.toml#enter_byobu = true，与 backend 选择正交、三 backend 通用）：
+agent 不再阻塞直启当前终端，改为在 byobu 固定 session `llm_workspace` 内按 wiki 名开窗口
+（llmw/wiki/byobu.py）——fire-and-forget：窗口建成即返回 0，不等 agent 退出、退出码不来自
+agent。已有同名窗口 → select-window 复用，不新建。最终 spawn 统一收口在 _spawn()。
 """
 
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import List
 
 from llmw._compat import TOMLDecodeError
 from llmw.errors import (
+    ByobuNotFound,
     ClaudeNotFound,
     SchemaVersionUnsupported,
     WikiDirMissing,
@@ -29,6 +37,7 @@ from llmw.errors import (
 from llmw.models import overlay, overlay_opencode
 from llmw.models.redact import redact_api_key
 from llmw.models.resolve import resolve_for_wiki
+from llmw.wiki import byobu
 from llmw.wiki.store import load as wiki_load
 from llmw.workspace import store as ws_store
 
@@ -74,6 +83,106 @@ def _build_cmd_opencode(wiki_path: Path):
     交付），不传 -m——-m 只是"选择已配置 provider/model"，provider 定义仍靠 overlay 文件。
     """
     return ["opencode", str(wiki_path)], None
+
+
+def _spawn(
+    wiki_path: Path,
+    name: str,
+    cmd: List[str],
+    ws: ws_store.WorkspaceToml,
+    dry_run: bool,
+) -> int:
+    """最终 spawn 收口（三 backend 共用）：enter_byobu 开 → byobu 窗口模式；关 → 阻塞直启。
+
+    byobu 模式（workspace.toml#enter_byobu = true）：fire-and-forget——窗口建成即返回 0，
+    不等 agent 退出、退出码不来自 agent。已有同名窗口 → select-window 复用，不新建。
+
+    dry-run 打印 byobu 决策树但不探测 byobu/session 状态（与"dry-run 跳过 PATH 检查"
+    同一约定：dry-run 零外部副作用）。
+    """
+    if dry_run:
+        print("[llmw] cmd:", file=sys.stdout)
+        print(f"  {' '.join(cmd)}", file=sys.stdout)
+        print(f"[llmw] env: LLM_WIKI_ROOT={wiki_path}", file=sys.stdout)
+        if ws.enter_byobu:
+            session = byobu._BYOBU_SESSION
+            quoted = " ".join(shlex.quote(a) for a in cmd)
+            print(
+                "[llmw] spawn: byobu (workspace.toml#enter_byobu；fire-and-forget，"
+                "不等 agent 退出、退出码不来自 agent)",
+                file=sys.stdout,
+            )
+            print(
+                f"[llmw]   session: {session} (固定名；窗口名 == wiki 名)",
+                file=sys.stdout,
+            )
+            print(
+                f"[llmw]   复用: 已有同名窗口 '{name}' → select-window 切换，不新建",
+                file=sys.stdout,
+            )
+            print("[llmw]   新建: 无同名窗口时将执行", file=sys.stdout)
+            print(
+                f"  byobu-tmux has-session -t {session} || "
+                f"byobu-tmux new-session -d -s {session} -n {name} -c {wiki_path} "
+                f"-e LLM_WIKI_ROOT={wiki_path} {quoted}",
+                file=sys.stdout,
+            )
+            print(
+                f"  byobu-tmux new-window -t {session} -n {name} -c {wiki_path} "
+                f"-e LLM_WIKI_ROOT={wiki_path} {quoted}",
+                file=sys.stdout,
+            )
+        else:
+            print(
+                "[llmw] spawn: subprocess.run (阻塞直启，退出码来自 agent)",
+                file=sys.stdout,
+            )
+        print("[llmw] --dry-run: 未执行", file=sys.stdout)
+        return 0
+
+    if ws.enter_byobu:
+        if not byobu.byobu_available():
+            raise ByobuNotFound(
+                "byobu-tmux 不在 PATH",
+                hint="安装 byobu，或 `llmw config unset enter_byobu` 回到直启模式",
+            )
+        created = byobu.spawn_window(
+            name, str(wiki_path), cmd, {"LLM_WIKI_ROOT": str(wiki_path)}
+        )
+        session = byobu._BYOBU_SESSION
+        if created:
+            print(
+                f"[llmw] ✓ 已在 byobu session '{session}' 新建窗口 '{name}'",
+                file=sys.stdout,
+            )
+        else:
+            print(
+                f"[llmw] ✓ 复用已有窗口 '{name}'（agent 已在运行；"
+                "overlay 已刷新落盘，但运行中的 agent 不会重读）",
+                file=sys.stdout,
+            )
+        # 引导用户看到新窗口：同 session 内 select/new-window 已自动切焦点；
+        # 异 session 给 switch-client（tmux 拒绝嵌套 attach）；不在 tmux 内给 attach。
+        cur = byobu.current_session()
+        if cur == session:
+            pass
+        elif cur is not None:
+            print(
+                f"[llmw] 当前在 tmux session '{cur}' 内；切过去: "
+                f"byobu-tmux switch-client -t {session}",
+                file=sys.stdout,
+            )
+        else:
+            print(f"[llmw] 查看窗口: byobu attach -t {session}", file=sys.stdout)
+        return 0
+
+    os.chdir(wiki_path)
+    # 注入 LLM_WIKI_ROOT,让 SKILL 在外部 session 也能定位当前 wiki
+    # (SKILL.md:57,126,208,333 + claude-md-template.md:11,146 + scripts/ingest_diff.py:215
+    #  + lint-checklist.md:15,17 一致期望该环境变量)。用 env= 显式传避免污染父进程 os.environ。
+    subprocess_env = {**os.environ, "LLM_WIKI_ROOT": str(wiki_path)}
+    result = subprocess.run(cmd, env=subprocess_env)
+    return result.returncode
 
 
 def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
@@ -133,17 +242,8 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
                 )
             else:
                 print("[llmw] CLAUDE.md: ✗ missing", file=sys.stdout)
-            print("[llmw] cmd:", file=sys.stdout)
-            print(f"  qodercli --add-dir {wiki_path}", file=sys.stdout)
-            print(f"[llmw] env: LLM_WIKI_ROOT={wiki_path}", file=sys.stdout)
-            print("[llmw] --dry-run: 未执行", file=sys.stdout)
-            return 0
-
-        os.chdir(wiki_path)
-        # 注入 LLM_WIKI_ROOT,让 SKILL 在外部 session 也能定位当前 wiki
-        subprocess_env = {**os.environ, "LLM_WIKI_ROOT": str(wiki_path)}
-        result = subprocess.run(cmd, env=subprocess_env)
-        return result.returncode
+        # cmd/env/spawn 方式/未执行 由 _spawn 统一打印（dry-run）或执行（real）
+        return _spawn(wiki_path, name, cmd, ws, dry_run)
 
     # claude（默认）/ opencode 路径：resolve → overlay → subprocess（两 backend 同族，
     # 只换 overlay 模块 / cmd / 展示文案）
@@ -223,11 +323,8 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
             )
         else:
             print(f"[llmw] {context_file.name}: ✗ missing", file=sys.stdout)
-        print("[llmw] cmd:", file=sys.stdout)
-        print(f"  {' '.join(cmd)}", file=sys.stdout)
-        print(f"[llmw] env: LLM_WIKI_ROOT={wiki_path}", file=sys.stdout)
-        print("[llmw] --dry-run: 未执行", file=sys.stdout)
-        return 0
+        # cmd/env/spawn 方式/未执行 由 _spawn 统一打印
+        return _spawn(wiki_path, name, cmd, ws, dry_run=True)
 
     # opencode 路径特有：overlay 落盘含明文 apiKey，写盘前确保 workspace .gitignore 的
     # **/opencode.json 排除行就位（老 workspace 的 managed block 可能还是旧版少行）。
@@ -242,12 +339,7 @@ def enter(workspace_root: Path, name: str, dry_run: bool = False) -> int:
             pass
 
     # 真正执行：lazy 写 overlay（claude=Local 层 settings.local.json；opencode=项目级
-    # opencode.json）→ subprocess 透传 os.environ（无 env overlay，无 --setting-sources）
+    # opencode.json）→ _spawn 收口（直启 = subprocess 透传 os.environ；
+    # byobu = 开窗口，-e 注入 LLM_WIKI_ROOT）
     ov.apply(wiki_path, model)
-    os.chdir(wiki_path)
-    # 注入 LLM_WIKI_ROOT,让 SKILL 在外部 session 也能定位当前 wiki
-    # (SKILL.md:57,126,208,333 + claude-md-template.md:11,146 + scripts/ingest_diff.py:215
-    #  + lint-checklist.md:15,17 一致期望该环境变量)。用 env= 显式传避免污染父进程 os.environ。
-    subprocess_env = {**os.environ, "LLM_WIKI_ROOT": str(wiki_path)}
-    result = subprocess.run(cmd, env=subprocess_env)
-    return result.returncode
+    return _spawn(wiki_path, name, cmd, ws, dry_run=False)

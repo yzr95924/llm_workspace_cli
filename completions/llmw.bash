@@ -74,7 +74,7 @@ _llmw() {
     local TOP="init config list model wiki"
     local WIKI_ACTS="add remove rename show config enter"
     local MODEL_ACTS="add list show set-default unset-default remove"
-    local CFG_KEYS="default_model enter_cli templates_version created_at schema_version"
+    local CFG_KEYS="default_model enter_cli enter_byobu templates_version created_at schema_version"
 
     COMPREPLY=()
 
@@ -133,7 +133,7 @@ _llmw() {
                         # [3]=key, [4]=value。cword=3 -> 补 key；cword=4 -> value 不补
                         # （与 wiki config set 的 wiki_pos 索引语义对齐）
                         if [ "$COMP_CWORD" -eq 3 ]; then
-                            COMPREPLY=($(compgen -W "default_model enter_cli" -- "$cur"))
+                            COMPREPLY=($(compgen -W "default_model enter_cli enter_byobu" -- "$cur"))
                         fi
                         ;;
                 esac

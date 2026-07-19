@@ -128,8 +128,10 @@ CLI 内联 wiki 骨架的字节一致性保证）见设计文档与备份 CLAUDE
 | `llmw.wiki.init_wiki` | 渲染骨架（spec §1-§6）；读 references/fixtures → atomic_write | 不写 wiki_metadata.toml、不进 wiki 业务流 |
 | `llmw.wiki.git_init` | `init`：spec §7 opt-in git 初始化（前置不通过则 warn 跳过） | 不写元数据 |
 | `llmw.wiki.manager` | add/remove/show/config 业务；add 调 init_wiki 与 git_init；校验 model_id | 不进 wiki 内部、不读 wiki/ 内容 |
-| `llmw.wiki.enter` | 启动 session：resolve model → `overlay.apply` 写启动配置 → agent CLI 子进程（透传 os.environ） | 不写元数据 |
+| `llmw.wiki.enter` | 启动 session：resolve model → `overlay.apply` 写启动配置 → `_spawn` 收口（agent CLI 子进程透传 os.environ，或 byobu 开窗口） | 不写元数据 |
+| `llmw.wiki.byobu` | byobu/tmux 薄封装 + 开窗编排：固定 session `llm_workspace` 的 ensure/find(window_id)/select/create；仅 enter 调用 | 不写元数据、不读配置 |
 | `llmw.models.overlay` | `render`/`inspect`/`apply`：resolved ModelEntry → 启动配置 `env` 块；幂等合并 + chmod 600 | — |
+| `llmw.models.overlay_opencode` | 与 overlay 平行：resolved ModelEntry → `<wiki>/opencode.json`（`provider.llmw` + 顶层 `model`；baseURL +`/v1` 规范化） | — |
 | `llmw.models.store` | workspace_models.toml 读写 + schema v2 + 字段校验 + chmod 600 | 不做 CRUD 业务、不做 resolve |
 | `llmw.models.redact` | `redact_api_key` 单一脱敏出口 | — |
 | `llmw.models.resolve` | `resolve_for_wiki` 单一查找入口：wiki.model 优先，否则 registry 默认 | 不做 CRUD |
@@ -154,7 +156,7 @@ CLI 内联 wiki 骨架的字节一致性保证）见设计文档与备份 CLAUDE
 三份元数据文件，都走原子写（`fsutil.atomic_write` = `tmp + fsync + os.replace`）：
 
 - **`<workspace>/workspace.toml`**：schema v1；`schema_version` / `created_at` / `templates_version`
-  （只读）+ `default_model`（可 set/unset）+ `[wikis.<name>]` 注册表
+  （只读）+ `default_model` / `enter_cli` / `enter_byobu`（可 set/unset）+ `[wikis.<name>]` 注册表
 - **`<workspace>/workspace_models.toml`**（Phase 2）：schema v2；`schema_version` / `created_at` /
   `updated_at`（只读，CLI 自动 bump）+ `[[models]]` 数组，每条含 `model_id` / `name` / `base_url` /
   `api_key` / 可选 `is_default`。约束：model_id 唯一（`^[a-z0-9_-]{1,64}$`，复用 wiki NAME_RE），
