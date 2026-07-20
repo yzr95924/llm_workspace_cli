@@ -4,12 +4,9 @@
 兑现 [[check-fixtures-as-executable-truth]]：CLI 改坏骨架 / my_SKILL 改坏 fixtures
 都让本 gate 红。双向覆盖。
 
-断言策略（对版本漂移免疫，不依赖阶段 4 bump）：
-- workspace 探测器 exit=0（版本已对齐 0.7.0，全 error check pass）
-- wiki 探测器：所有 error 级 check passed=True，**忽略** ``agents-version-is-current``
-  （CLI ``WIKI_SPEC_VERSION`` 滞后 my_SKILL 的已知漂移，阶段 4 bump 后自愈；gate 不为它红）
-
-阶段 4 bump 后 wiki 也全 pass，本脚本无需改动（忽略项本就 pass，无害）。
+断言策略：两探测器所有 error 级 check passed=True（允许 skipped/null）。
+版本常量已对齐（CLI ``*_SPEC_VERSION`` = my_SKILL frontmatter），故**不忽略任何
+check**——版本漂移（CLI 忘 bump / my_SKILL 先 bump）也会被 gate 抓住，强制跨仓协调。
 
 standalone，Python 3.7+（与项目最低支持版本对齐）。用法：``python3 scripts/test/smoke_fixtures.py``
 """
@@ -31,7 +28,7 @@ WS_CHECK = (
 WIKI_CHECK = SKILL / "yzr-llm-wiki-management" / "scripts" / "check_wiki_fixtures.py"
 
 
-def _llmw(args, cwd=None):
+def _llmw(args):
     """跑 ``python -m llmw <args>``，失败即抛（gate 红）。"""
     env = dict(os.environ, PYTHONPATH=str(REPO))
     proc = subprocess.run(
@@ -39,7 +36,6 @@ def _llmw(args, cwd=None):
         env=env,
         capture_output=True,
         text=True,
-        cwd=cwd,
     )
     if proc.returncode != 0:
         sys.stderr.write(proc.stdout)
@@ -66,6 +62,25 @@ def _detector_json(script, root):
         sys.stderr.write(proc.stdout)
         sys.stderr.write(proc.stderr)
         raise SystemExit(1)
+
+
+def _assert_all_error_pass(script, root, label):
+    """断言探测器所有 error 级 check passed=True（允许 skipped/null）。
+
+    fail → 列出 fail 的 check id（诊断）+ exit 1；返回解析后的 JSON dict。
+    """
+    data = _detector_json(script, root)
+    failed = [
+        "{} ({})".format(c["id"], c.get("file", "?"))
+        for c in data["checks"]
+        if c.get("severity") == "error" and c.get("passed") is False
+    ]
+    if failed:
+        sys.stderr.write("FAIL: {} 探测器 error check fail: {}\n".format(label, failed))
+        sys.stderr.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        raise SystemExit(1)
+    print("[OK] {} 探测器：所有 error check pass".format(label))
+    return data
 
 
 def main():
@@ -105,55 +120,21 @@ def main():
                 "--model=m1",
             ]
         )
-        wiki = ws / "w"
 
-        # workspace：断言 exit=0（全 error check pass）
-        ws_env = dict(os.environ, PYTHONPATH=str(REPO))
-        ws_proc = subprocess.run(
-            [sys.executable, str(WS_CHECK), str(ws), "--json"],
-            env=ws_env,
-            capture_output=True,
-            text=True,
-        )
-        if ws_proc.returncode != 0:
-            sys.stderr.write(ws_proc.stdout)
-            sys.stderr.write(ws_proc.stderr)
-            raise SystemExit(
-                "FAIL: workspace 探测器 exit={}".format(ws_proc.returncode)
-            )
-        print("[OK] workspace 探测器 exit=0（7/7 pass）")
+        ws_data = _assert_all_error_pass(WS_CHECK, ws, "workspace")
+        wiki_data = _assert_all_error_pass(WIKI_CHECK, ws / "w", "wiki")
 
-        # wiki：断言所有 error check pass，忽略 agents-version 版本漂移
-        data = _detector_json(WIKI_CHECK, wiki)
-        # 允许的版本漂移 check（阶段 4 bump 后自愈）
-        VERSION_DRIFT = {"agents-version-is-current"}
-        failed = [
-            c["id"]
-            for c in data["checks"]
-            if c.get("severity") == "error"
-            and c.get("passed") is False
-            and c["id"] not in VERSION_DRIFT
-        ]
-        if failed:
-            sys.stderr.write(
-                "FAIL: wiki 探测器非版本漂移的 error fail: {}\n".format(failed)
-            )
-            sys.stderr.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
-            raise SystemExit(1)
-        # 显式确认新 check 落地（对接 E2 读取契约）
-        ids = {c["id"]: c.get("passed") for c in data["checks"]}
-        if ids.get("wiki-metadata-reads-satisfied") is not True:
-            raise SystemExit(
-                "FAIL: wiki-metadata-reads-satisfied 未 pass: {}".format(ids)
-            )
-        drifted = [
-            c["id"]
-            for c in data["checks"]
-            if c["id"] in VERSION_DRIFT and c.get("passed") is False
-        ]
-        suffix = "（忽略版本漂移: {}）".format(drifted) if drifted else ""
-        print("[OK] wiki 探测器：所有 error check pass{}".format(suffix))
-        print("[OK] wiki-metadata-reads-satisfied passed=True（读取契约自洽）")
+        # 显式确认两条读取契约 check（E1/E2）落地且 pass——SKILL 读取契约自洽对接
+        for check_id, data in [
+            ("workspace-toml-reads-satisfied", ws_data),
+            ("wiki-metadata-reads-satisfied", wiki_data),
+        ]:
+            ids = {c["id"]: c.get("passed") for c in data["checks"]}
+            if ids.get(check_id) is not True:
+                raise SystemExit(
+                    "FAIL: {} check 未 pass/缺失: {}".format(check_id, ids)
+                )
+        print("[OK] 读取契约 check（E1/E2）passed=True")
 
     print("\nsmoke gate PASS")
 
