@@ -41,3 +41,19 @@ jobs:
       - run: |
           pytest -q; code=$?
           [ "$code" -eq 0 ] || [ "$code" -eq 5 ]
+
+  # fresh init + wiki → 两探测器（my_SKILL 的 check_*_fixtures.py）→ 断言结构合规。
+  # 双向覆盖：CLI 改坏骨架 / my_SKILL 改坏 fixtures 都让本 job 红。兑现
+  # 探测器作为「CLI 产物合规的可执行真源」（spec 与探测器不一致时以探测器为准）。
+  # 依赖 submodule（my_SKILL 含探测器 + fixtures 金标准），故 submodules: true。
+  fixtures-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # 不需 pip install：gate 脚本内设 PYTHONPATH=REPO，python -m llmw 直接 import。
+      - run: python scripts/test/smoke_fixtures.py
