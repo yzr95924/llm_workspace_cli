@@ -31,9 +31,11 @@ MiniMax-M3（context 1e6 / output 131072）；需按模型区分时升级为 reg
 context 命名约定，opencode/AI SDK 直连网关时不能照发——2026-07-20 四网关实测：
 qwen / glm 400 拒带后缀名；kimi 在真实 max_tokens（32000）下 401 拒
 （`other:k3[1m]`，报文自承须 `k3`；max_tokens=1 的小探针反而 200，易误诊）；
-minimax 两种都收。剥后缀后四网关全 200。展示名 "name" 保留 model.name（TUI 与
-registry 命名一致）；context 知识已由 limit.context 显式提供，不依赖名字后缀。
-claude 路径不受影响（overlay.py 仍写原 name，k3[1m] 在 Claude Code 实测可用）。
+minimax 两种都收。剥后缀后四网关全 200。models 条目**不再写 "name" 展示字段**——
+与剥后缀后的 key 同值即冗余，opencode 缺省用 key 做显示名；opencode 场景下
+`[1m]` 彻底不可见（2026-07-20 用户要求统一去掉；claude 路径不受影响，overlay.py
+仍写原 name，k3[1m] 在 Claude Code 实测可用）。context 知识已由 limit.context
+显式提供，不依赖名字后缀。
 
 **baseURL 需要 +/v1 规范化**（`_ai_sdk_base_url`，2026-07-19 对 MiniMax 网关实测）：
 registry 存的是 Claude Code 约定——请求 URL = ``{base_url}/v1/messages``（Claude Code
@@ -94,9 +96,9 @@ def render(model: ModelEntry) -> dict:
     """ModelEntry → owned 片段：provider.llmw 整对象 + 顶层 model key。
 
     models map 的 key（= 线上发送的 model id）用 `_gateway_model_id` 剥掉 `[...]`
-    后缀的名字（如 k3），不是 model_id slug；展示名 "name" 保留 model.name 原样
-    （如 k3[1m]，TUI 与 registry 命名一致）。baseURL 走 _ai_sdk_base_url 规范化
-    （Claude Code 约定 → AI SDK 约定）。
+    后缀的名字（如 k3），不是 model_id slug；不写 "name" 展示字段（与 key 同值即
+    冗余，opencode 缺省用 key 显示）——opencode 场景下 `[1m]` 后缀彻底不可见。
+    baseURL 走 _ai_sdk_base_url 规范化（Claude Code 约定 → AI SDK 约定）。
     """
     model_id = _gateway_model_id(model.name)
     return {
@@ -110,7 +112,6 @@ def render(model: ModelEntry) -> dict:
                 },
                 "models": {
                     model_id: {
-                        "name": model.name,
                         "limit": {"context": _CONTEXT_WINDOW, "output": _MAX_OUTPUT},
                     }
                 },
