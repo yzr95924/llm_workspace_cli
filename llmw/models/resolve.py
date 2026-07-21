@@ -69,7 +69,7 @@ def resolve_for_wiki(workspace_root: Path, wiki_name: str) -> ModelEntry:
         # 用户体验：直接说 ModelDefaultNotSet，不要暴露 RegistryMissing
         raise ModelDefaultNotSet(
             str(e.message),
-            hint="运行 `llmw model add --model-id ... --name ... --base-url ... --api-key ... --default` 初始化 registry",
+            hint="运行 `llmw model add --model-id=... --name=... --base-url=... --api-key=... --default` 初始化 registry",
         )
 
     # wiki 指定了 model → 必须存在
@@ -87,6 +87,6 @@ def resolve_for_wiki(workspace_root: Path, wiki_name: str) -> ModelEntry:
     if not defaults:
         raise ModelDefaultNotSet(
             "registry 中没有 is_default=true 的条目",
-            hint="运行 `llmw model set-default --model-id <ID>` 标记默认",
+            hint="运行 `llmw model set-default --model-id=<ID>` 标记默认",
         )
     return defaults[0]

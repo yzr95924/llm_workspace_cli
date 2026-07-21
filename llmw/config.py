@@ -36,7 +36,7 @@ def resolve_workspace_root(
     if not (root / "workspace.toml").is_file():
         raise WorkspaceNotFound(
             hint=f"目录 {root} 不是 llmw workspace（缺少 workspace.toml）。"
-            f"可运行 `llmw init --path {root}`",
+            f"可运行 `llmw init --path={root}`",
         )
     return root
 

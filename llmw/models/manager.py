@@ -122,7 +122,7 @@ def model_add(
     if model_id in reg.models:
         raise ModelIdConflict(
             f"model_id '{model_id}' 已存在",
-            hint="换一个 model_id，或先 `llmw model remove --model-id <ID>`",
+            hint="换一个 model_id，或先 `llmw model remove --model-id=<ID>`",
         )
 
     reg.models[model_id] = ModelEntry(
@@ -147,7 +147,7 @@ def model_list(workspace_root: Path, as_json: bool = False) -> int:
     reg = load(workspace_root)
     if reg.models and not any(m.is_default for m in reg.models.values()):
         print(
-            "[llmw] (registry has no default — use `llmw model set-default --model-id <ID>` to enable enter)",
+            "[llmw] (registry has no default — use `llmw model set-default --model-id=<ID>` to enable enter)",
             file=sys.stderr,
         )
     if as_json:
@@ -248,7 +248,7 @@ def model_remove(workspace_root: Path, model_id: str, yes: bool = False) -> None
     if target.is_default:
         raise ModelIsDefault(
             f"model '{model_id}' 是默认, 不能直接 remove",
-            hint="先 `llmw model set-default --model-id <其他>` 或 `llmw model unset-default`",
+            hint="先 `llmw model set-default --model-id=<其他>` 或 `llmw model unset-default`",
         )
 
     # 非 TTY 下需要 --yes

@@ -152,7 +152,7 @@ def add(
         except RegistryMissing:
             raise ModelDefaultNotSet(
                 "workspace 还没有 registry, 无法校验 model",
-                hint="先跑 `llmw model add --model-id ... --name ... --base-url ... --api-key ... --default` 至少一条",
+                hint="先跑 `llmw model add --model-id=... --name=... --base-url=... --api-key=... --default` 至少一条",
             )
         if model not in reg.models:
             raise ModelNotInRegistry(
