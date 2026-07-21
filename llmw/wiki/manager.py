@@ -1,7 +1,7 @@
 """wiki 级业务: add / remove / show / config / rename"""
 
+import errno
 import json
-import shutil
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -358,23 +358,24 @@ def rename(
     as_json: bool = False,
     quiet: bool = False,
 ) -> None:
-    """rename wiki ``old`` → ``new``: 4 阶段,原件不动直至切换前。
+    """rename wiki ``old`` → ``new``: 3 阶段原地 rename + 廉价回滚。
 
     改动 3 处 (workspace.toml key / 子目录 / wiki_metadata.toml name) + 若 topic
-    默认值==old 则同步 topic。
+    默认值==old 则同步 topic。子目录走 POSIX rename (同 FS 下 O(1) 原子, 只改目录项,
+    不动 inode 数据 / symlink), raw/ 下大量文件零拷贝 —— 取代旧的 staging copytree 副本。
 
-    失败策略:
-    - Phase 1 (staging 副本 + metadata 改写) 失败: clean staging,原件不动
-    - Phase 2 (workspace.toml save) 失败: clean staging,原件不动
-    - Phase 3 (atomic rename) 失败: 回滚 workspace.toml + clean staging
+    失败策略 (每步失败都回滚到 rename 前一致状态):
+    - Phase 1 (改 old_path metadata) 失败: atomic_write 不留半成品, old_path 完全不动
+    - Phase 2 (old_path.rename(new_path)) 失败: metadata 改回 (EXDEV 附 hint), 目录仍在 old_path
+    - Phase 3 (切 workspace.toml) 失败: fs rename 回来 + metadata 改回
 
     Raises:
         InvalidWikiName: new 不符 NAME_RE,或 old == new
         WikiNotFound: old 不在 workspace registry
         WikiExists: new 已在 workspace registry,或 new_path 已存在
-        WikiDirMissing: old_path 不在,或 staging 内 wiki_metadata.toml 缺失
+        WikiDirMissing: old_path 目录或 wiki_metadata.toml 缺失
         SchemaVersionUnsupported: wiki_metadata.toml schema_version 不被支持
-        OSError: 任何文件系统操作失败 (经 InternalError 包装由 cli 顶层处理)
+        OSError: 文件系统操作失败 (如跨 FS 的 EXDEV; 经 InternalError 包装由 cli 顶层处理)
     """
     wiki_store.validate_name(new)
     if old == new:
@@ -400,76 +401,71 @@ def rename(
             f"目标路径已存在: {new_path}",
             hint="清理后重试, 或选别的 new 名",
         )
+    if not old_path.is_dir() or not (old_path / "wiki_metadata.toml").is_file():
+        # registry 有登记但磁盘目录不完整 (被手动移走 / 删除 / 残缺)
+        raise WikiDirMissing(
+            f"wiki 目录或 wiki_metadata.toml 缺失: {old_path}",
+            hint=f"registry 仍登记 '{old}', 但磁盘目录不完整; 检查是否被手动移走",
+        )
 
     # created_at 跨 rename 保留,维持时间锚点
     created_at = ws.wikis[old].created_at
 
-    # ===== Phase 1: 准备 staging 副本 (原件不动) =====
-    # 复用 .llmw-trash/ (已在 workspace .gitignore managed block),不加新目录。
-    # staging 目录名带 timestamp 防重入 (同一秒内并发调用也几乎不会撞,留作保险)。
-    ts = now_iso8601().replace(":", "")
-    staging = workspace_root / ".llmw-trash" / f"rename-{old}-to-{new}-{ts}"
+    # ===== Phase 1: 原地改 old_path 的 metadata (name→new) =====
+    # wiki_store.save 走 atomic_write (tmp + rename), 失败不留半成品 → old_path 完全不动。
+    # 目录名此刻仍为 old, 与 metadata.name=new 短暂不一致, Phase 2 原子 rename 后即对齐。
+    meta = wiki_store.load(old_path)  # SchemaVersionUnsupported / TOMLDecodeError 透传
+    old_topic = meta.topic
+    meta.name = new
+    if meta.topic == old:
+        meta.topic = new
+    meta.bump()
+    wiki_store.save(old_path, meta)
 
+    # ===== Phase 2: 原子重命名 old_path → new_path (O(1), 同 FS) =====
+    # POSIX rename 同 FS 下只改目录项, 不动 inode 数据 / symlink → raw/ 下大量文件零拷贝。
+    # 跨 FS 抛 EXDEV (workspace 目录应同 FS; NFS 不安全, 见 AGENTS.md)。
     try:
-        staging.parent.mkdir(parents=True, exist_ok=True)
-        # symlinks=False: 拷贝内容而非符号链接,避免 mv 后链接断裂
-        shutil.copytree(old_path, staging, symlinks=False)
-
-        # 修改 staging 内 metadata
-        meta = wiki_store.load(staging)
-        old_topic = meta.topic
-        meta.name = new
-        if meta.topic == old:
-            meta.topic = new
-        meta.bump()
-        wiki_store.save(staging, meta)
-    except (OSError, SchemaVersionUnsupported, TOMLDecodeError):
-        # WikiDirMissing / OSError / schema 不兼容: 任一留半成品都清理掉
-        if staging.exists():
-            safe_rmtree(staging)
+        old_path.rename(new_path)
+    except OSError as e:
+        # 回滚 Phase 1: metadata 的 name/topic 恢复成 rename 前
+        try:
+            meta.name = old
+            meta.topic = old_topic
+            wiki_store.save(old_path, meta)
+        except OSError as rollback_err:
+            print(
+                f"[llmw] warning: 回滚 metadata 失败: {rollback_err}; "
+                f"{old_path}/wiki_metadata.toml 可能停留在 name={new}",
+                file=sys.stderr,
+            )
+        if e.errno == errno.EXDEV:
+            print(
+                "[llmw] hint: old/new 不在同一文件系统 (EXDEV); workspace 目录应位于"
+                "同一 FS, NFS 挂载不安全 (见 AGENTS.md)",
+                file=sys.stderr,
+            )
         raise
 
-    # ===== Phase 2: 切换 workspace.toml =====
+    # ===== Phase 3: 切换 workspace.toml (del old / add new) =====
     try:
         ws.wikis[new] = ws_store.WikiEntry(name=new, path=new, created_at=created_at)
         del ws.wikis[old]
         ws_store.save(workspace_root, ws)
     except (OSError, TOMLDecodeError):
-        # workspace.toml 写失败 → 原件不动,清理 staging
-        if staging.exists():
-            safe_rmtree(staging)
-        raise
-
-    # ===== Phase 3: 原子重命名 staging → new_path =====
-    # POSIX rename 同 FS 下原子;registry 已无 new,fs 上 new_path 也已被 Phase 0 检查为空
-    try:
-        staging.rename(new_path)
-    except OSError:
-        # rollback workspace.toml (删 new 加回 old)
+        # 回滚 Phase 2 + 1: fs rename 回来 + metadata 恢复
         try:
-            del ws.wikis[new]
-            ws.wikis[old] = ws_store.WikiEntry(
-                name=old, path=old, created_at=created_at
-            )
-            ws_store.save(workspace_root, ws)
-        finally:
-            if staging.exists():
-                safe_rmtree(staging)
-        raise
-
-    # ===== Phase 4: 清理原目录 =====
-    # rename 已把 staging 切到 new_path,原 old_path 是 copytree 留下的副本,
-    # 现在 registry / fs / metadata 三者都指向 new,原件 obsolete 必须删。
-    # 若 rmtree 失败 (罕见;权限 / 占用),warning 后继续 — registry 已切换,
-    # 用户可手动 rmdir;不让残留的 old 阻塞 rename 整体语义。
-    if old_path.exists():
-        try:
-            safe_rmtree(old_path)
-        except OSError as e:
+            new_path.rename(old_path)
+            meta.name = old
+            meta.topic = old_topic
+            wiki_store.save(old_path, meta)
+        except OSError as rollback_err:
             print(
-                f"[llmw] warning: 清理原目录 {old_path} 失败: {e};可手动 rmdir 删除",
+                f"[llmw] warning: 回滚失败: {rollback_err}; fs/registry 可能不一致, "
+                f"手动检查 {new_path} 与 workspace.toml",
                 file=sys.stderr,
             )
+        raise
 
     topic_changed = old_topic == old
 
